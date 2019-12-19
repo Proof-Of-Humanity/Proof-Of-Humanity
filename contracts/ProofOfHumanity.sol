@@ -139,7 +139,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     modifier onlyByGovernor() {require(governor == msg.sender, "The caller must be the governor."); _;}
 
-
     /** @dev Constructor.
      *  @param _arbitrator The trusted arbitrator to resolve potential disputes.
      *  @param _arbitratorExtraData Extra data for the trusted arbitrator contract.
