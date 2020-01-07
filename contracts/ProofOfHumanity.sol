@@ -139,6 +139,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     modifier onlyByGovernor() {require(governor == msg.sender, "The caller must be the governor."); _;}
 
+    /* Events */
+    event ArbitratorComplete(IArbitrator arbitrator, address indexed governor, uint submissionBaseDeposit, uint submissionChallengeBaseDeposit, uint submissionDuration, uint challengePeriodDuration, uint requiredNumberOfVouches, uint sharedStakeMultiplier, uint winnerStakeMultiplier, uint loserStakeMultiplier, uint[2] fineAmounts, uint[2] banDurations);
+
     /** @dev Constructor.
      *  @param _arbitrator The trusted arbitrator to resolve potential disputes.
      *  @param _arbitratorExtraData Extra data for the trusted arbitrator contract.
@@ -188,6 +191,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         fineAmounts = _fineAmounts;
         banDurations = _banDurations;
+
+        emit ArbitratorComplete(arbitrator, governor, submissionBaseDeposit, submissionChallengeBaseDeposit, submissionDuration, challengePeriodDuration, requiredNumberOfVouches, sharedStakeMultiplier, winnerStakeMultiplier, loserStakeMultiplier, fineAmounts, banDurations);
     }
 
     /* External and Public */
