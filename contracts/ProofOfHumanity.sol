@@ -55,7 +55,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     struct Submission {
         Status status; // The current status of the submission.
         bool registered; // Whether the submission is in the registry or not.
-        uint submissionTime; // The time when the request to add a new submission was made or when the submission was accepted to the list.
+        uint submissionTime; // The time when the submission was accepted to the list.
         uint renewalTimestamp; // The time after which it becomes possible to reapply the submission.
         Request[] requests; // List of status change requests made for the submission.
     }
@@ -74,10 +74,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         address[] vouches; // Stores the addresses of all submissions that vouched for this request.
         Reason[] usedReasons; // Stores all reasons, that were used to challenge a registration request, to make sure that each reason was only used once.
         Reason currentReason; // Current reason a registration request was challenged with. Is left empty for removal requests.
-        uint nbParallelDisputes; // Tracks the number of simultaneously raised disputes.Parallel disputes are only allowed for reason Duplicate.
+        uint nbParallelDisputes; // Tracks the number of simultaneously raised disputes. Parallel disputes are only allowed for reason Duplicate.
         address payable ultimateChallenger; // Address of the challenger who won a dispute and who users, that vouched for the request, must pay the fines to.
         bool requesterLost; // True if the requester has already had a dispute that wasn't ruled in his favor.
-        uint penaltyIndex; // Stores the index of the last processed vouch in the array of vouches. Is used for partial proccessing of the vouches in resolved submissions.
+        uint penaltyIndex; // Stores the index of the last processed vouch in the array of vouches. Is used for partial processing of the vouches in resolved submissions.
         uint currentDuplicateIndex; // Stores the array index of the duplicate submission provided by the challenger who is currently winning.
     }
 
@@ -125,10 +125,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     address[] public submissionList; // List of IDs of all submissions.
     mapping(address => Submission) public submissions; // Maps the submission ID to its data. submissions[submissionID].
-    mapping (address => uint) public submissionToIndex; // Maps the submission ID to its position in the list. submissionToIndex[submissionID].
+    mapping(address => uint) public submissionToIndex; // Maps the submission ID to its position in the list. submissionToIndex[submissionID].
 
-    mapping (address => mapping (address => bool)) public vouches; // Indicates whether or not the voucher has vouched for a certain submission. vouches[voucherID][submissionID].
-    mapping (address => bool) public usedVouch; // Indicates whether or not the voucher has vouched for a submission that entered PendingRegistration state. usedVouch[voucherID].
+    mapping(address => mapping(address => bool)) public vouches; // Indicates whether or not the voucher has vouched for a certain submission. vouches[voucherID][submissionID].
+    mapping(address => bool) public usedVouch; // Indicates whether or not the voucher has vouched for a submission that entered PendingRegistration state. usedVouch[voucherID].
 
     mapping(address => mapping(uint => Challenge)) public arbitratorDisputeIDToChallenge; // Maps a dispute ID with the data of the challenger who created a dispute. arbitratorDisputeIDToChallenge[arbitrator][disputeID].
 
@@ -206,7 +206,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[submission.requests.length++];
         submission.registered = true;
         submission.submissionTime = now;
-        submission.renewalTimestamp = now + submissionDuration.subCap(renewalTime);
+        submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
         request.resolved = true;
     }
 
@@ -313,7 +313,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     // ************************ //
 
     /** @dev Make a request to add a new entry to the list. Paying the full deposit right away is not required as it can be crowdfunded later.
-     *  @param _evidence A link to an evidence using its URI.
+     *  @param _evidence A link to evidence using its URI.
      */
     function addSubmission(string calldata _evidence) external payable {
         Submission storage submission = submissions[msg.sender];
@@ -328,7 +328,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /** @dev Make a request to refresh a submissionDuration. Paying the full deposit right away is not required as it can be crowdfunded later.
      *  Note that the user can reapply even when current submissionDuration has not expired, but only after the start of renewal period.
-     *  @param _evidence A link to an evidence using its URI.
+     *  @param _evidence A link to evidence using its URI.
      */
     function reapplySubmission(string calldata _evidence) external payable {
         Submission storage submission = submissions[msg.sender];
@@ -340,7 +340,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /** @dev Make a request to remove a submission from the list. Requires full deposit. Accepts enough ETH to cover the deposit, reimburses the rest.
      *  @param _submissionID The address of the submission to remove.
-     *  @param _evidence A link to an evidence using its URI.
+     *  @param _evidence A link to evidence using its URI.
      */
     function removeSubmission(address _submissionID, string calldata _evidence) external payable {
         Submission storage submission = submissions[_submissionID];
@@ -350,7 +350,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         requestStatusChange(_submissionID, _evidence);
     }
 
-    /** @dev Fund the requester's deposit. Accepts enough ETH to cover potential dispute, reimburses the rest.
+    /** @dev Fund the requester's deposit. Accepts enough ETH to cover the deposit, reimburses the rest.
      *  @param _submissionID The address of the submission which ongoing request to fund.
      */
     function fundSubmission(address _submissionID) external payable {
@@ -413,7 +413,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _submissionID The address of the submission which request to challenge.
      *  @param _reason The reason to challenge the request. Left empty for removal requests.
      *  @param _duplicateID The address of a supposed duplicate submission. Left empty if the reason is not Duplicate.
-     *  @param _evidence A link to an evidence using its URI. Ignored if not provided.
+     *  @param _evidence A link to evidence using its URI. Ignored if not provided.
      */
     function challengeRequest(address _submissionID, Reason _reason, address _duplicateID, string calldata _evidence) external payable {
         Submission storage submission = submissions[_submissionID];
@@ -544,7 +544,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         if (submission.status == Status.PendingRegistration) {
             submission.registered = true;
             submission.submissionTime = now;
-            submission.renewalTimestamp = now + submissionDuration.subCap(renewalTime);
+            submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
         } else if (submission.status == Status.PendingRemoval)
             submission.registered = false;
         else
@@ -668,7 +668,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /** @dev Make a request to change submission's status. Paying the full deposit right away is not required for registration requests.
      *  @param _submissionID The address of the submission which status to change.
-     *  @param _evidence A link to an evidence using its URI.
+     *  @param _evidence A link to evidence using its URI.
      */
     function requestStatusChange(address _submissionID, string memory _evidence) internal {
         Submission storage submission = submissions[_submissionID];
@@ -758,7 +758,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                             submission.registered = true;
                             submission.status = Status.None;
                             submission.submissionTime = now;
-                            submission.renewalTimestamp = now + submissionDuration.subCap(renewalTime);
+                            submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
                         } else {
                             // Refresh the state of the request so it can be challenged again.
                             request.disputed = false;
