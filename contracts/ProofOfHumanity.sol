@@ -399,7 +399,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
-            if (!usedVouch[_vouches[i]] && submissions[_vouches[i]].registered && now - submissions[_vouches[i]].submissionTime <= submissionDuration) {
+            if (!usedVouch[_vouches[i]] && submissions[_vouches[i]].registered && now - submissions[_vouches[i]].submissionTime <= submissionDuration &&
+            vouches[_vouches[i]][_submissionID] == true) {
                 request.vouches.push(_vouches[i]);
                 usedVouch[_vouches[i]] = true;
             }
