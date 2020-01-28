@@ -541,11 +541,13 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[submission.requests.length - 1];
         require(now - request.lastStatusChange > challengePeriodDuration, "Time to challenge the request must pass.");
         require(!request.disputed, "The request should not be disputed.");
-
         if (submission.status == Status.PendingRegistration) {
-            submission.registered = true;
-            submission.submissionTime = now;
-            submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
+            // It is possible for the requester to lose without a dispute if he was penalized for bad vouching while reapplying.
+            if (!request.requesterLost) {
+                submission.registered = true;
+                submission.submissionTime = now;
+                submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
+            }
         } else if (submission.status == Status.PendingRemoval)
             submission.registered = false;
         else
@@ -569,7 +571,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         require(request.resolved, "The submission should be resolved.");
 
         uint actualIterations = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
-            request.vouches.length - request.penaltyIndex : _iterations;
+            request.vouches.length.subCap(request.penaltyIndex) : _iterations;
 
         uint endIndex = actualIterations + request.penaltyIndex;
         for (uint i = request.penaltyIndex; i < endIndex; i++) {
@@ -606,6 +608,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[_request];
         Round storage round = request.rounds[_challengeID][_round];
         require(request.resolved, "The submission should be resolved.");
+        require(_beneficiary != address(0x0), "Beneficiary address should not be empty.");
 
         uint reward;
         if (_round != 0 && (!round.hasPaid[uint(Party.Requester)] || !round.hasPaid[uint(Party.Challenger)])) {
@@ -625,11 +628,14 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.contributions[_beneficiary][uint(Party.Challenger)] = 0;
         } else {
             // Give the winner the reward for rounds he might not have been able to contribute to.
-            if (_round == 0 && ((_beneficiary == request.ultimateChallenger && _challengeID == 0 && request.requesterLost) ||
-               (_beneficiary == request.requester && _challengeID > 0 && !request.requesterLost))) {
+            // Challenger, who ultimately wins, will be able to get the deposit of the requester, even if he didn't participate in the initial dispute.
+            // Requester, if wins a dispute, will be able to get the deposit of the challenger of said dispute, even if he ultimately loses a request. This does not apply to the initial dispute, however.
+            if (_round == 0 && ((_beneficiary == request.ultimateChallenger && _challengeID == 0) ||
+               (_beneficiary == request.requester && _challengeID > 0 && request.rulings[_challengeID] == uint(Party.Requester)))) {
                 reward = round.feeRewards;
                 round.feeRewards = 0;
-            } else {
+            // This condition will prevent claiming a reward, intended for the ultimate challenger.
+            } else if (request.ultimateChallenger==address(0x0) || _challengeID!=0 || _round!=0) {
                 reward = round.paidFees[request.rulings[_challengeID]] > 0
                     ? (round.contributions[_beneficiary][request.rulings[_challengeID]] * round.feeRewards) / round.paidFees[request.rulings[_challengeID]]
                     : 0;
@@ -782,8 +788,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                     submission.status = Status.None;
                 request.requesterLost = true;
                 // Store the challenger that made the requester lose. Update the challenger if there is a duplicate with lower submission time, which is indicated by submission's array index.
-                if (_ruling==uint(Party.Challenger) && (request.currentReason!=Reason.Duplicate || request.ultimateChallenger==address(0x0) ||
-                challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
+                if (_ruling==uint(Party.Challenger) && (request.ultimateChallenger==address(0x0) || challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
                     request.ultimateChallenger = challenge.challenger;
                     request.currentDuplicateIndex = challenge.duplicateSubmissionIndex;
                 }
