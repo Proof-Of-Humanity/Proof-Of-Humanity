@@ -10,6 +10,7 @@ import "./AppealableArbitrator.sol";
 contract EnhancedAppealableArbitrator is AppealableArbitrator {
     /* Constructor */
 
+    /* solium-disable no-empty-blocks */
     /** @dev Constructs the `EnhancedAppealableArbitrator` contract.
      *  @param _arbitrationPrice The amount to be paid for arbitration.
      *  @param _arbitrator The back up arbitrator.
@@ -18,10 +19,11 @@ contract EnhancedAppealableArbitrator is AppealableArbitrator {
      */
     constructor(
         uint _arbitrationPrice,
-        Arbitrator _arbitrator,
+        IArbitrator _arbitrator,
         bytes memory _arbitratorExtraData,
         uint _timeOut
     ) public AppealableArbitrator(_arbitrationPrice, _arbitrator, _arbitratorExtraData, _timeOut) {}
+    /* solium-enable no-empty-blocks */
 
     /* Public Views */
 
@@ -30,7 +32,7 @@ contract EnhancedAppealableArbitrator is AppealableArbitrator {
      *  @return The start and end of the period.
      */
     function appealPeriod(uint _disputeID) public view returns(uint start, uint end) {
-        if (appealDisputes[_disputeID].arbitrator != Arbitrator(address(0)))
+        if (appealDisputes[_disputeID].arbitrator != IArbitrator(address(0)))
             (start, end) = appealDisputes[_disputeID].arbitrator.appealPeriod(appealDisputes[_disputeID].appealDisputeID);
         else {
             start = appealDisputes[_disputeID].rulingTime;
