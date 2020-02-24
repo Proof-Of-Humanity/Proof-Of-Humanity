@@ -2420,4 +2420,41 @@ contract('ProofOfHumanity', function(accounts) {
       'Incorrect extraData value'
     )
   })
+
+  it('Should correctly withdraw the mistakenly added submission', async () => {
+    await proofH.addSubmission('evidence1', {
+      from: requester,
+      value: requesterTotalCost
+    })
+
+    const oldBalance = await web3.eth.getBalance(requester)
+    const txWithdraw = await proofH.withdrawSubmission({
+      from: requester,
+      gasPrice: gasPrice
+    })
+    const txFee = txWithdraw.receipt.gasUsed * gasPrice
+
+    const newBalance = await web3.eth.getBalance(requester)
+    const submission = await proofH.getSubmissionInfo(requester)
+    const request = await proofH.getRequestInfo(requester, 0)
+
+    assert(
+      new BN(newBalance).eq(
+        new BN(oldBalance).add(new BN(requesterTotalCost).sub(new BN(txFee)))
+      ),
+      'The requester has incorrect balance after withdrawal'
+    )
+
+    assert.equal(
+      submission[0].toNumber(),
+      0,
+      'Submission should have a default status'
+    )
+    assert.equal(request[2], true, 'The request should be resolved')
+
+    await expectRevert(
+      proofH.withdrawSubmission({ from: requester }),
+      'The submission should be in a vouching state.'
+    )
+  })
 })
