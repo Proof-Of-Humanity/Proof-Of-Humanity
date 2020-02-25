@@ -2424,25 +2424,41 @@ contract('ProofOfHumanity', function(accounts) {
   it('Should correctly withdraw the mistakenly added submission', async () => {
     await proofH.addSubmission('evidence1', {
       from: requester,
-      value: requesterTotalCost
+      value: requesterTotalCost * 0.4
     })
 
-    const oldBalance = await web3.eth.getBalance(requester)
+    await proofH.fundSubmission(requester, { from: other, value: 1e18 })
+
+    const oldBalanceRequester = await web3.eth.getBalance(requester)
     const txWithdraw = await proofH.withdrawSubmission({
       from: requester,
       gasPrice: gasPrice
     })
     const txFee = txWithdraw.receipt.gasUsed * gasPrice
 
-    const newBalance = await web3.eth.getBalance(requester)
+    const newBalanceRequester = await web3.eth.getBalance(requester)
     const submission = await proofH.getSubmissionInfo(requester)
     const request = await proofH.getRequestInfo(requester, 0)
 
     assert(
-      new BN(newBalance).eq(
-        new BN(oldBalance).add(new BN(requesterTotalCost).sub(new BN(txFee)))
+      new BN(newBalanceRequester).eq(
+        new BN(oldBalanceRequester).add(
+          new BN(requesterTotalCost * 0.4).sub(new BN(txFee))
+        )
       ),
       'The requester has incorrect balance after withdrawal'
+    )
+
+    const oldBalanceCrowdfunder = await web3.eth.getBalance(other)
+    await proofH.withdrawFeesAndRewards(other, requester, 0, 0, 0, {
+      from: governor
+    })
+    const newBalanceCrowdfunder = await web3.eth.getBalance(other)
+    assert(
+      new BN(newBalanceCrowdfunder).eq(
+        new BN(oldBalanceCrowdfunder).add(new BN(requesterTotalCost * 0.6))
+      ),
+      'The crowdfunder has incorrect balance after withdrawal'
     )
 
     assert.equal(
