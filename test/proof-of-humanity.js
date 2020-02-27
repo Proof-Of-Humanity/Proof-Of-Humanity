@@ -2420,4 +2420,57 @@ contract('ProofOfHumanity', function(accounts) {
       'Incorrect extraData value'
     )
   })
+
+  it('Should correctly withdraw the mistakenly added submission', async () => {
+    await proofH.addSubmission('evidence1', {
+      from: requester,
+      value: requesterTotalCost * 0.4
+    })
+
+    await proofH.fundSubmission(requester, { from: other, value: 1e18 })
+
+    const oldBalanceRequester = await web3.eth.getBalance(requester)
+    const txWithdraw = await proofH.withdrawSubmission({
+      from: requester,
+      gasPrice: gasPrice
+    })
+    const txFee = txWithdraw.receipt.gasUsed * gasPrice
+
+    const newBalanceRequester = await web3.eth.getBalance(requester)
+    const submission = await proofH.getSubmissionInfo(requester)
+    const request = await proofH.getRequestInfo(requester, 0)
+
+    assert(
+      new BN(newBalanceRequester).eq(
+        new BN(oldBalanceRequester).add(
+          new BN(requesterTotalCost * 0.4).sub(new BN(txFee))
+        )
+      ),
+      'The requester has incorrect balance after withdrawal'
+    )
+
+    const oldBalanceCrowdfunder = await web3.eth.getBalance(other)
+    await proofH.withdrawFeesAndRewards(other, requester, 0, 0, 0, {
+      from: governor
+    })
+    const newBalanceCrowdfunder = await web3.eth.getBalance(other)
+    assert(
+      new BN(newBalanceCrowdfunder).eq(
+        new BN(oldBalanceCrowdfunder).add(new BN(requesterTotalCost * 0.6))
+      ),
+      'The crowdfunder has incorrect balance after withdrawal'
+    )
+
+    assert.equal(
+      submission[0].toNumber(),
+      0,
+      'Submission should have a default status'
+    )
+    assert.equal(request[2], true, 'The request should be resolved')
+
+    await expectRevert(
+      proofH.withdrawSubmission({ from: requester }),
+      'The submission should be in a vouching state.'
+    )
+  })
 })

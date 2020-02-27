@@ -17,7 +17,7 @@ import "@kleros/ethereum-libraries/contracts/CappedMath.sol";
 
 /**
  *  @title ProofOfHumanity
- *  This contract is a curated registry for people. The users are indicated by their address and can be added or removed through the request-challenge protocol.
+ *  This contract is a curated registry for people. The users are identified by their address and can be added or removed through the request-challenge protocol.
  *  In order to challenge a registration request the challenger must provide one of the four reasons.
  *  New requests firstly should gain sufficient amount of vouches from other registered users and only after that they can be accepted or challenged.
  *  The users who vouched for submission that lost the challenge with the reason Duplicate or DoesNotExist would be penalized with optional fine or ban period.
@@ -44,7 +44,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     enum Reason {
         None, // No reason specified. This option should be used to challenge removal requests.
-        IncorrectSubmssion, // The submission does not comply with the submission rules.
+        IncorrectSubmission, // The submission does not comply with the submission rules.
         Deceased, // The submitter has existed but does not exist anymore.
         Duplicate, // The submitter is already registered. The challenger has to point to the identity already registered or to a duplicate submission.
         DoesNotExist // The submitter is not real. For example, this can be used for videos showing computer generated persons.
@@ -384,6 +384,19 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Submission has to be in vouching state.");
         vouches[msg.sender][_submissionID] = false;
+    }
+
+    /** @dev Allows to withdraw a mistakenly added submission while it's still in a vouching state.
+     */
+    function withdrawSubmission() external {
+        Submission storage submission = submissions[msg.sender];
+        require(submission.status == Status.Vouching, "The submission should be in a vouching state.");
+        Request storage request = submission.requests[submission.requests.length - 1];
+
+        submission.status = Status.None;
+        request.resolved = true;
+
+        withdrawFeesAndRewards(msg.sender, msg.sender, submission.requests.length - 1, 0, 0); // Automatically withdraw for the requester.
     }
 
     /** @dev Change submission's state from Vouching to PendingRegistration if all conditions are met.
