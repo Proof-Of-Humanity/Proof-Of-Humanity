@@ -76,9 +76,9 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     MULTIPLIER_DIVISOR = (await proofH.MULTIPLIER_DIVISOR()).toNumber()
-    await proofH.addSubmissionManually(voucher1, { from: governor })
-    await proofH.addSubmissionManually(voucher2, { from: governor })
-    await proofH.addSubmissionManually(voucher3, { from: governor })
+    await proofH.addSubmissionManually(voucher1, '', { from: governor })
+    await proofH.addSubmissionManually(voucher2, '', { from: governor })
+    await proofH.addSubmissionManually(voucher3, '', { from: governor })
 
     requesterTotalCost =
       arbitrationCost +
@@ -175,7 +175,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     await expectRevert(
-      proofH.addSubmissionManually(voucher2, { from: governor }),
+      proofH.addSubmissionManually(voucher2, '', { from: governor }),
       'The submission has already been created.'
     )
   })
@@ -293,7 +293,7 @@ contract('ProofOfHumanity', function(accounts) {
 
     // Check that manual actions are not possible as well.
     await expectRevert(
-      proofH.addSubmissionManually(requester, { from: governor }),
+      proofH.addSubmissionManually(requester, '', { from: governor }),
       'The submission has already been created.'
     )
     await expectRevert(
@@ -2279,7 +2279,7 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Should make governance changes', async () => {
     await expectRevert(
-      proofH.addSubmissionManually(other, { from: other }),
+      proofH.addSubmissionManually(other, '', { from: other }),
       'The caller must be the governor.'
     )
     await expectRevert(
