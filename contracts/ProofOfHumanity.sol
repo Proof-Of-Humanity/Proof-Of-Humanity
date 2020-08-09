@@ -197,8 +197,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /** @dev Allows the governor to directly add a new submission to the list as a part of the seeding event.
      *  @param _submissionID The address of a newly added submission.
+     *  @param _evidence A link to evidence using its URI.
      */
-    function addSubmissionManually(address _submissionID) external onlyByGovernor {
+    function addSubmissionManually(address _submissionID, string calldata _evidence) external onlyByGovernor {
         Submission storage submission = submissions[_submissionID];
         require(submission.requests.length == 0, "The submission has already been created.");
         submissionList.push(_submissionID);
@@ -209,6 +210,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         submission.submissionTime = now;
         submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
         request.resolved = true;
+
+        if (bytes(_evidence).length > 0)
+            emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
     }
 
     /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
@@ -683,6 +687,19 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         emit Ruling(IArbitrator(msg.sender), _disputeID, uint(resultRuling));
         executeRuling(_disputeID, uint(resultRuling));
+    }
+
+    /** @dev Submit a reference to evidence. EVENT.
+     *  @param _submissionID The address of the submission which the evidence is related to.
+     *  @param _evidence A link to an evidence using its URI.
+     */
+    function submitEvidence(address _submissionID, string calldata _evidence) external {
+        Submission storage submission = submissions[_submissionID];
+        Request storage request = submission.requests[submission.requests.length - 1];
+        require(!request.resolved, "The submission should not be resolved.");
+
+        if (bytes(_evidence).length > 0)
+            emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
     }
 
     /* Internal */
