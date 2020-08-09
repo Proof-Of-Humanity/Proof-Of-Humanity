@@ -702,7 +702,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
     }
 
-
     /* Internal */
 
     /** @dev Make a request to change submission's status. Paying the full deposit right away is not required for registration requests.
