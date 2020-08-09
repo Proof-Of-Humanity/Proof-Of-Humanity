@@ -696,7 +696,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function submitEvidence(address _submissionID, string calldata _evidence) external {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[submission.requests.length - 1];
-        require(!request.resolved, "The dispute must not already be resolved.");
+        require(!request.resolved, "The submission should not be resolved.");
 
         if (bytes(_evidence).length > 0)
             emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
