@@ -379,6 +379,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function addVouch(address _submissionID) external {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Submission has to be in vouching state.");
+        require(_submissionID != msg.sender, "Can not vouch for yourself.");
         vouches[msg.sender][_submissionID] = true;
     }
 
