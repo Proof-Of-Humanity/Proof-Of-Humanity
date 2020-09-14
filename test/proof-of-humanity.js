@@ -552,6 +552,12 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     await proofH.addSubmission('evidence1', { from: requester })
+
+    await expectRevert(
+      proofH.addVouch(requester, { from: requester }),
+      'Can not vouch for yourself.'
+    )
+
     await proofH.addVouch(requester, { from: voucher1 })
     let isVouched = await proofH.vouches(voucher1, requester)
     assert.equal(
