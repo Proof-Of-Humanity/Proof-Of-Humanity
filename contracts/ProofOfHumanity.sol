@@ -64,21 +64,21 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     struct Request {
         bool disputed; // True if a dispute was raised. Note that the request can enter disputed state multiple times, once per reason.
-        uint[] disputeIDs; // Stores the IDs of all disputes that were raised during challenge period. disputeIDs[challengeID].
-        uint lastStatusChange; // Time when submission's status was last updated. Is used to track when the challenge period ends.
         bool resolved; // True if the request is executed and/or all raised disputes are resolved.
         address payable requester; // Address that made a request. It matches submissionID in case of registration requests.
+        uint[] disputeIDs; // Stores the IDs of all disputes that were raised during challenge period. disputeIDs[challengeID].
+        uint lastStatusChange; // Time when submission's status was last updated. Is used to track when the challenge period ends.
         Round[][] rounds; // Tracks each round of each dispute that was raised during the challenge period. rounds[challengeID][roundID].
         mapping(uint => uint) rulings; // Maps a dispute index with a ruling given to it. rulings[challengeID].
         IArbitrator arbitrator; // The arbitrator trusted to solve disputes for this request.
         bytes arbitratorExtraData; // The extra data for the trusted arbitrator of this request.
         uint metaEvidenceID; // The meta evidence to be used in a dispute for this case.
         address[] vouches; // Stores the addresses of all submissions that vouched for this request.
+        uint nbParallelDisputes; // Tracks the number of simultaneously raised disputes. Parallel disputes are only allowed for reason Duplicate.
         Reason[] usedReasons; // Stores all reasons, that were used to challenge a registration request, to make sure that each reason was only used once.
         Reason currentReason; // Current reason a registration request was challenged with. Is left empty for removal requests.
-        uint nbParallelDisputes; // Tracks the number of simultaneously raised disputes. Parallel disputes are only allowed for reason Duplicate.
-        address payable ultimateChallenger; // Address of the challenger who won a dispute and who users, that vouched for the request, must pay the fines to.
         bool requesterLost; // True if the requester has already had a dispute that wasn't ruled in his favor.
+        address payable ultimateChallenger; // Address of the challenger who won a dispute and who users, that vouched for the request, must pay the fines to.
         uint penaltyIndex; // Stores the index of the last processed vouch in the array of vouches. Is used for partial processing of the vouches in resolved submissions.
         uint currentDuplicateIndex; // Stores the array index of the duplicate submission provided by the challenger who is currently winning.
     }
