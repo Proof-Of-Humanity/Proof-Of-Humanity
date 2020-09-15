@@ -588,15 +588,16 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[_requestID];
         require(request.resolved, "The submission should be resolved.");
-        bool didTheChallengerWin = request.ultimateChallenger != address(0x0);
-        Reason winnerReason = request.usedReasons[request.usedReasons.length - 1];
 
         uint endIndex = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
             request.vouches.length : request.penaltyIndex + _iterations;
+        // If the submission was challenged successfully, because it is duplicated or does not exists, vouchers are unregistered.
+        Reason winnerReason = request.usedReasons.length > 0 ? request.usedReasons[request.usedReasons.length - 1] : Reason.None;
+        bool applyPenalty = request.ultimateChallenger != address(0x0) && (winnerReason == Reason.Duplicate || winnerReason == Reason.DoesNotExist);
 
         for (uint i = request.penaltyIndex; i < endIndex; i++) {
             usedVouch[request.vouches[i]] = false;
-            if (didTheChallengerWin && (winnerReason == Reason.Duplicate || winnerReason == Reason.DoesNotExist)) {
+            if (applyPenalty) {
                 Submission storage voucher = submissions[request.vouches[i]];
                 // Check the situation when vouching address is in the middle of reapplication process.
                 if (voucher.status == Status.Vouching || voucher.status == Status.PendingRegistration)
