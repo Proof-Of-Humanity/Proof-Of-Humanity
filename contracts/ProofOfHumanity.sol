@@ -56,6 +56,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     struct Submission {
         Status status; // The current status of the submission.
         bool registered; // Whether the submission is in the registry or not.
+        uint index; // Submissions are ordered by index in submissionList.
         uint submissionTime; // The time when the submission was accepted to the list.
         uint renewalTimestamp; // The time after which it becomes possible to reapply the submission.
         Request[] requests; // List of status change requests made for the submission.
@@ -126,7 +127,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     address[] public submissionList; // List of IDs of all submissions.
     mapping(address => Submission) public submissions; // Maps the submission ID to its data. submissions[submissionID].
-    mapping(address => uint) public submissionToIndex; // Maps the submission ID to its position in the list. submissionToIndex[submissionID].
 
     mapping(address => mapping(address => bool)) public vouches; // Indicates whether or not the voucher has vouched for a certain submission. vouches[voucherID][submissionID].
     mapping(address => bool) public usedVouch; // Indicates whether or not the voucher has vouched for a submission that entered PendingRegistration state. usedVouch[voucherID].
@@ -203,7 +203,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.requests.length == 0, "The submission has already been created.");
         submissionList.push(_submissionID);
-        submissionToIndex[_submissionID] = submissionList.length - 1;
+        submission.index = submissionList.length - 1;
 
         Request storage request = submission.requests[submission.requests.length++];
         submission.registered = true;
@@ -325,7 +325,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         require(!submission.registered && submission.status == Status.None, "You shouldn't already be registered or registering.");
         if (submission.requests.length == 0) {
             submissionList.push(msg.sender);
-            submissionToIndex[msg.sender] = submissionList.length - 1;
+            submission.index = submissionList.length - 1;
         }
         submission.status = Status.Vouching;
         requestStatusChange(msg.sender, _evidence);
@@ -482,7 +482,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         challenge.challengeID = request.disputeIDs.length - 1;
         challenge.challenger = msg.sender;
         challenge.challengedSubmission = _submissionID;
-        challenge.duplicateSubmissionIndex = submissionToIndex[_duplicateID];
+        challenge.duplicateSubmissionIndex = submissions[_duplicateID].index;
 
         request.rounds[request.disputeIDs.length - 1].length++;
         request.rounds[request.rounds.length++].length++;
