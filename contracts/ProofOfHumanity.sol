@@ -588,28 +588,21 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[_requestID];
         require(request.resolved, "The submission should be resolved.");
+        bool didTheChallengerWin = request.ultimateChallenger != address(0x0);
+        Reason winnerReason = request.usedReasons[request.usedReasons.length - 1];
 
-        uint actualIterations = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
-            request.vouches.length.subCap(request.penaltyIndex) : _iterations;
+        uint endIndex = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
+            request.vouches.length : request.penaltyIndex + _iterations;
 
-        uint endIndex = actualIterations + request.penaltyIndex;
         for (uint i = request.penaltyIndex; i < endIndex; i++) {
             usedVouch[request.vouches[i]] = false;
-            // If the ultimate challenger is defined that means that the request was ruled in favor of the challenger.
-            if (request.ultimateChallenger != address(0x0)) {
+            if (didTheChallengerWin && (winnerReason == Reason.Duplicate || winnerReason == Reason.DoesNotExist)) {
                 Submission storage voucher = submissions[request.vouches[i]];
-                if (request.usedReasons[request.usedReasons.length - 1] == Reason.Duplicate) {
-                    // Check the situation when vouching address is in the middle of reapplication process.
-                    if (voucher.status == Status.Vouching || voucher.status == Status.PendingRegistration)
-                        voucher.requests[voucher.requests.length - 1].requesterLost = true;
+                // Check the situation when vouching address is in the middle of reapplication process.
+                if (voucher.status == Status.Vouching || voucher.status == Status.PendingRegistration)
+                    voucher.requests[voucher.requests.length - 1].requesterLost = true;
 
-                    voucher.registered = false;
-                } else if (request.usedReasons[request.usedReasons.length - 1] == Reason.DoesNotExist) {
-                    if (voucher.status == Status.Vouching || voucher.status == Status.PendingRegistration)
-                        voucher.requests[voucher.requests.length - 1].requesterLost = true;
-
-                    voucher.registered = false;
-                }
+                voucher.registered = false;
             }
         }
         request.penaltyIndex = endIndex;
