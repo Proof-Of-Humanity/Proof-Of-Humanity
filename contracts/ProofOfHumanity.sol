@@ -212,7 +212,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.resolved = true;
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
+            emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, 0))), msg.sender, _evidence);
     }
 
     /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
