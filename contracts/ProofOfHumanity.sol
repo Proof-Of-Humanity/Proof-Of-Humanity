@@ -727,7 +727,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.hasPaid[uint(Party.Requester)] = true;
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
+            emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, 0))), msg.sender, _evidence);
     }
 
     /** @dev Returns the contribution value and remainder from available ETH and required amount.
