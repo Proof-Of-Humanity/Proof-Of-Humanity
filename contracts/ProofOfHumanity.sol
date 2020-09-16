@@ -781,8 +781,13 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         Party winner = Party(_ruling);
 
-        if (winner == Party.Requester) {
-            if (submission.status == Status.PendingRegistration) {
+        if (submission.status == Status.PendingRemoval) {
+            submission.registered = winner == Party.Requester ? false : true;
+            submission.status = Status.None;
+            request.resolved = true;
+        } else if (submission.status == Status.PendingRegistration) {
+            // For a registration request there can be many disputes
+            if (winner == Party.Requester) {
                 if (request.nbParallelDisputes == 1) {
                     // Check whether or not the requester won all of his previous disputes for current reason.
                     if (!request.requesterLost) {
@@ -792,43 +797,39 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                             submission.status = Status.None;
                             submission.submissionTime = now;
                             submission.renewalTimestamp = now.addCap(submissionDuration.subCap(renewalTime));
+                            request.resolved = true;
                         } else {
                             // Refresh the state of the request so it can be challenged again.
                             request.disputed = false;
                             request.lastStatusChange = now;
                             request.currentReason = Reason.None;
                         }
-                    } else
-                       submission.status = Status.None;
+                    } else {
+                        submission.status = Status.None;
+                        equest.resolved = true;
+                    }
                 }
-            } else if (submission.status == Status.PendingRemoval) {
-                submission.registered = false;
-                submission.status = Status.None;
-                request.resolved = true;
-            }
-        // Challenger won or it’s a tie.
-        } else {
-            if (submission.status == Status.PendingRegistration) {
-                // Update the status of the submission if there is no more disputes left.
-                if (request.nbParallelDisputes == 1)
-                    submission.status = Status.None;
+            // Challenger won or it’s a tie.
+            } else {
                 request.requesterLost = true;
+                // Update the status of the submission if there is no more disputes left.
+                if (request.nbParallelDisputes == 1) {
+                    submission.status = Status.None;
+                    request.resolved = true;
+                }
                 // Store the challenger that made the requester lose. Update the challenger if there is a duplicate with lower submission time, which is indicated by submission's array index.
                 if (_ruling==uint(Party.Challenger) && (request.ultimateChallenger==address(0x0) || challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
                     request.ultimateChallenger = challenge.challenger;
                     request.currentDuplicateIndex = challenge.duplicateSubmissionIndex;
                 }
-            } else if (submission.status == Status.PendingRemoval) {
-                submission.status = Status.None;
-                request.resolved = true;
             }
+            if (request.usedReasons.length == NB_REASONS && request.nbParallelDisputes == 1)
+                request.resolved = true;
         }
+
         // Decrease the number of parallel disputes each time the dispute is resolved. Store the rulings of each dispute for correct distribution of rewards.
         request.nbParallelDisputes--;
         request.rulings[challenge.challengeID] = _ruling;
-
-        if ((request.requesterLost || request.usedReasons.length == NB_REASONS) && request.nbParallelDisputes == 0)
-            request.resolved = true;
     }
 
     // ************************ //
