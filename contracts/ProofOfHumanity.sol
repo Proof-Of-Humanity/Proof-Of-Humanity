@@ -581,7 +581,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function processVouches(address _submissionID, uint _requestID, uint _iterations) external {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[_requestID];
-        require(request.resolved, "The submission should be resolved.");
+        require(request.resolved, "The submission must be resolved");
 
         uint endIndex = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
             request.vouches.length : request.penaltyIndex + _iterations;
@@ -614,7 +614,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[_request];
         Round storage round = request.rounds[_challengeID][_round];
-        require(request.resolved, "Submission must be resolved");
+        require(request.resolved, "The submission must be resolved");
         require(_beneficiary != address(0x0), "Empty beneficiary address");
 
         uint reward;
