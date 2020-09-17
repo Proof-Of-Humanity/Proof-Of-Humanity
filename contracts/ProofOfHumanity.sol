@@ -626,14 +626,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.contributions[_beneficiary][uint(Party.Requester)] = 0;
             round.contributions[_beneficiary][uint(Party.Challenger)] = 0;
         } else if (request.rulings[_challengeID] == uint(Party.None)) {
-            uint rewardRequester = round.paidFees[uint(Party.Requester)] > 0
-                ? (round.contributions[_beneficiary][uint(Party.Requester)] * round.feeRewards) / (round.paidFees[uint(Party.Challenger)] + round.paidFees[uint(Party.Requester)])
+            uint totalFeesInRound = round.paidFees[uint(Party.Challenger)] + round.paidFees[uint(Party.Requester)];
+            reward = totalFeesInRound > 0
+                ? (round.contributions[_beneficiary][uint(Party.Requester)] + round.contributions[_beneficiary][uint(Party.Requester)]) * round.feeRewards / totalFeesInRound
                 : 0;
-            uint rewardChallenger = round.paidFees[uint(Party.Challenger)] > 0
-                ? (round.contributions[_beneficiary][uint(Party.Challenger)] * round.feeRewards) / (round.paidFees[uint(Party.Challenger)] + round.paidFees[uint(Party.Requester)])
-                : 0;
-
-            reward = rewardRequester + rewardChallenger;
+            
             round.contributions[_beneficiary][uint(Party.Requester)] = 0;
             round.contributions[_beneficiary][uint(Party.Challenger)] = 0;
         } else {
