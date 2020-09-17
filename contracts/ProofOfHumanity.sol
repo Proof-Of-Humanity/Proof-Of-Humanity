@@ -201,7 +201,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function addSubmissionManually(address _submissionID, string calldata _evidence) external onlyByGovernor {
         Submission storage submission = submissions[_submissionID];
-        require(submission.requests.length == 0, "The submission has already been created.");
+        require(submission.requests.length == 0, "Submission already exists");
         submissionList.push(_submissionID);
         submission.index = submissionList.length - 1;
 
@@ -220,7 +220,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function removeSubmissionManually(address _submissionID) external onlyByGovernor {
         Submission storage submission = submissions[_submissionID];
-        require(submission.registered && submission.status == Status.None, "The submission must be registered in order to be removed.");
+        require(submission.registered && submission.status == Status.None, "Submission not found");
         submission.registered = false;
     }
 
@@ -322,7 +322,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function addSubmission(string calldata _evidence) external payable {
         Submission storage submission = submissions[msg.sender];
-        require(!submission.registered && submission.status == Status.None, "You shouldn't already be registered or registering.");
+        require(!submission.registered && submission.status == Status.None, "You are already registered/registering");
         if (submission.requests.length == 0) {
             submissionList.push(msg.sender);
             submission.index = submissionList.length - 1;
@@ -337,8 +337,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function reapplySubmission(string calldata _evidence) external payable {
         Submission storage submission = submissions[msg.sender];
-        require(submission.registered && submission.status == Status.None, "You must be registered and not have pending requests in order to reapply.");
-        require(now >= submission.renewalTimestamp, "Time for reapplication hasn't started yet.");
+        require(submission.registered && submission.status == Status.None, "Not registered or Invalid status");
+        require(now >= submission.renewalTimestamp, "Renewal period hasn't started");
         submission.status = Status.Vouching;
         requestStatusChange(msg.sender, _evidence);
     }
@@ -349,8 +349,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function removeSubmission(address _submissionID, string calldata _evidence) external payable {
         Submission storage submission = submissions[_submissionID];
-        require(submission.registered && submission.status == Status.None, "The submission must be registered in order to be removed.");
-        require(now < submission.renewalTimestamp || now - submission.submissionTime > submissionDuration, "Can't make a removal request during renewal period.");
+        require(submission.registered && submission.status == Status.None, "Not registered or Invalid status");
+        require(now < submission.renewalTimestamp || now - submission.submissionTime > submissionDuration, "Invalid period: renewal");
         submission.status = Status.PendingRemoval;
         requestStatusChange(_submissionID, _evidence);
     }
@@ -360,10 +360,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function fundSubmission(address _submissionID) external payable {
         Submission storage submission = submissions[_submissionID];
-        require(submission.status == Status.Vouching, "The submission should be in vouching status.");
+        require(submission.status == Status.Vouching, "Status must be Vouching");
         Request storage request = submission.requests[submission.requests.length - 1];
         Round storage round = request.rounds[0][0];
-        require(!round.hasPaid[uint(Party.Requester)], "The initial fee has already been paid.");
+        require(!round.hasPaid[uint(Party.Requester)], "Submission fee is fully paid");
 
         uint arbitrationCost = request.arbitrator.arbitrationCost(request.arbitratorExtraData);
         uint totalCost = arbitrationCost.addCap((arbitrationCost.mulCap(sharedStakeMultiplier)) / MULTIPLIER_DIVISOR).addCap(submissionBaseDeposit);
@@ -378,8 +378,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function addVouch(address _submissionID) external {
         Submission storage submission = submissions[_submissionID];
-        require(submission.status == Status.Vouching, "Submission has to be in vouching state.");
-        require(_submissionID != msg.sender, "Can not vouch for yourself.");
+        require(submission.status == Status.Vouching, "Status must be Vouching");
+        require(_submissionID != msg.sender, "Cannot vouch for yourself");
         vouches[msg.sender][_submissionID] = true;
     }
 
@@ -388,7 +388,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function removeVouch(address _submissionID) external {
         Submission storage submission = submissions[_submissionID];
-        require(submission.status == Status.Vouching, "Submission has to be in vouching state.");
+        require(submission.status == Status.Vouching, "Status must be Vouching");
         vouches[msg.sender][_submissionID] = false;
     }
 
@@ -396,7 +396,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function withdrawSubmission() external {
         Submission storage submission = submissions[msg.sender];
-        require(submission.status == Status.Vouching, "The submission should be in a vouching state.");
+        require(submission.status == Status.Vouching, "Status must be Vouching");
         Request storage request = submission.requests[submission.requests.length - 1];
 
         submission.status = Status.None;
@@ -411,10 +411,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function changeStateToPending(address _submissionID, address[] calldata _vouches) external {
         Submission storage submission = submissions[_submissionID];
-        require(submission.status == Status.Vouching, "The submission should be in a vouching state.");
+        require(submission.status == Status.Vouching, "Status must be Vouching");
         Request storage request = submission.requests[submission.requests.length - 1];
         Round storage round = request.rounds[0][0];
-        require(round.hasPaid[uint(Party.Requester)], "Requester didn't pay his fees.");
+        require(round.hasPaid[uint(Party.Requester)], "Requester didn't pay his fees");
 
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
@@ -424,7 +424,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                 usedVouch[_vouches[i]] = true;
             }
         }
-        require(request.vouches.length >= requiredNumberOfVouches, "Not enough valid vouches.");
+        require(request.vouches.length >= requiredNumberOfVouches, "Not enough valid vouches");
         submission.status = Status.PendingRegistration;
         request.lastStatusChange = now;
     }
@@ -438,31 +438,31 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function challengeRequest(address _submissionID, Reason _reason, address _duplicateID, string calldata _evidence) external payable {
         Submission storage submission = submissions[_submissionID];
         if (submission.status == Status.PendingRegistration)
-            require(_reason != Reason.None, "Reason to challenge should be specified.");
+            require(_reason != Reason.None, "Challenge reason is expected");
         else if (submission.status == Status.PendingRemoval)
-            require(_reason == Reason.None, "Reason must be left empty for removal requests.");
+            require(_reason == Reason.None, "Challenge reason must be empty");
         else
-            revert("The submission must have a pending status.");
+            revert("Invalid submission status");
 
         Request storage request = submission.requests[submission.requests.length - 1];
-        require(now - request.lastStatusChange <= challengePeriodDuration, "Challenges must occur during the challenge period.");
+        require(now - request.lastStatusChange <= challengePeriodDuration, "Not in challenge period");
 
         if (_reason == Reason.Duplicate) {
-            require(submissions[_duplicateID].status > Status.None || submissions[_duplicateID].registered, "A supposed duplicate should be either registered or pending registration.");
-            require(_submissionID != _duplicateID, "Can't be a duplicate of itself.");
-            require(request.currentReason == _reason || request.currentReason == Reason.None, "The submission has already been challenged with another reason.");
+            require(submissions[_duplicateID].status > Status.None || submissions[_duplicateID].registered, "Alleged duplicate not valid");
+            require(_submissionID != _duplicateID, "Can't be a duplicate of itself");
+            require(request.currentReason == _reason || request.currentReason == Reason.None, "Another challenge is active");
         }
         else {
-            require(!request.disputed, "The request should not have already been disputed.");
-            require(_duplicateID == address(0x0), "DuplicateID should be empty for this reason.");
+            require(!request.disputed, "Another challenge is active");
+            require(_duplicateID == address(0x0), "DuplicateID must be empty");
         }
 
         if (request.currentReason != _reason) {
             for (uint i = 0; i < request.usedReasons.length; i++)
-                require(request.usedReasons[i] != _reason, "This reason has already been used.");
+                require(request.usedReasons[i] != _reason, "Reason already used");
 
             request.usedReasons.push(_reason);
-            require(request.usedReasons.length <= NB_REASONS, "All reasons have already been used.");
+            require(request.usedReasons.length <= NB_REASONS, "No more reasons to challenge");
             request.currentReason = _reason;
         }
 
@@ -470,7 +470,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         uint arbitrationCost = request.arbitrator.arbitrationCost(request.arbitratorExtraData);
         uint totalCost = arbitrationCost.addCap((arbitrationCost.mulCap(sharedStakeMultiplier)) / MULTIPLIER_DIVISOR).addCap(submissionChallengeBaseDeposit);
         contribute(round, Party.Challenger, msg.sender, msg.value, totalCost);
-        require(round.paidFees[uint(Party.Challenger)] >= totalCost, "You must fully fund your side.");
+        require(round.paidFees[uint(Party.Challenger)] >= totalCost, "You must fully fund your side");
         round.hasPaid[uint(Party.Challenger)] = true;
 
         request.disputeIDs.push(request.arbitrator.createDispute.value(arbitrationCost)(RULING_OPTIONS, request.arbitratorExtraData));
@@ -505,18 +505,15 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _side The recipient of the contribution.
      */
     function fundAppeal(address _submissionID, uint _challengeID, Party _side) external payable {
-        require(_side == Party.Requester || _side == Party.Challenger);
+        require(_side == Party.Requester || _side == Party.Challenger, "Invalid Party");
         require(
             submissions[_submissionID].status == Status.PendingRegistration || submissions[_submissionID].status == Status.PendingRemoval,
-            "The submission must have a pending request."
+            "Submission status invalid"
         );
         Request storage request = submissions[_submissionID].requests[submissions[_submissionID].requests.length - 1];
-        require(request.disputed, "A dispute must have been raised to fund an appeal.");
+        require(request.disputed, "No dispute was raised");
         (uint appealPeriodStart, uint appealPeriodEnd) = request.arbitrator.appealPeriod(request.disputeIDs[_challengeID]);
-        require(
-            now >= appealPeriodStart && now < appealPeriodEnd,
-            "Contributions must be made within the appeal period."
-        );
+        require(now >= appealPeriodStart && now < appealPeriodEnd, "Not in appeal period");
 
         uint multiplier;
 
@@ -526,7 +523,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             loser = Party.Challenger;
         else if (winner == Party.Challenger)
             loser = Party.Requester;
-        require(_side!=loser || (now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2), "The loser must contribute during the first half of the appeal period.");
+        require(_side!=loser || (now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2), "Not in loser's appeal period");
 
         if (_side == winner)
             multiplier = winnerStakeMultiplier;
@@ -558,8 +555,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function executeRequest(address _submissionID) external {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[submission.requests.length - 1];
-        require(now - request.lastStatusChange > challengePeriodDuration, "Time to challenge the request must pass.");
-        require(!request.disputed, "The request should not be disputed.");
+        require(now - request.lastStatusChange > challengePeriodDuration, "Challenge period must end first");
+        require(!request.disputed, "The request is disputed");
         if (submission.status == Status.PendingRegistration) {
             // It is possible for the requester to lose without a dispute if he was penalized for bad vouching while reapplying.
             if (!request.requesterLost) {
@@ -570,7 +567,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         } else if (submission.status == Status.PendingRemoval)
             submission.registered = false;
         else
-            revert("Incorrect status.");
+            revert("Incorrect status");
 
         submission.status = Status.None;
         request.resolved = true;
@@ -620,8 +617,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[_request];
         Round storage round = request.rounds[_challengeID][_round];
-        require(request.resolved, "The submission should be resolved.");
-        require(_beneficiary != address(0x0), "Beneficiary address should not be empty.");
+        require(request.resolved, "Submission must be resolved");
+        require(_beneficiary != address(0x0), "Empty beneficiary address");
 
         uint reward;
         if (_round != 0 && (!round.hasPaid[uint(Party.Requester)] || !round.hasPaid[uint(Party.Challenger)])) {
@@ -691,7 +688,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function submitEvidence(address _submissionID, string calldata _evidence) external {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[submission.requests.length - 1];
-        require(!request.resolved, "The submission should not be resolved.");
+        require(!request.resolved, "Submission already resolved");
 
         if (bytes(_evidence).length > 0)
             emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, submission.requests.length - 1))), msg.sender, _evidence);
@@ -718,7 +715,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         contribute(round, Party.Requester, msg.sender, msg.value, totalCost);
 
         if (submission.status == Status.PendingRemoval) {
-            require(round.paidFees[uint(Party.Requester)] >= totalCost, "You must fully fund your side.");
+            require(round.paidFees[uint(Party.Requester)] >= totalCost, "You must fully fund your side");
             request.metaEvidenceID = 2 * metaEvidenceUpdates + 1;
         } else
             request.metaEvidenceID = 2 * metaEvidenceUpdates;
