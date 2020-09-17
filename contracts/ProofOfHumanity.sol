@@ -416,7 +416,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Round storage round = request.rounds[0][0];
         require(round.hasPaid[uint(Party.Requester)], "Requester didn't pay his fees");
 
-        for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
+        for (uint i = 0; i < _vouches.length && request.vouches.length < requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
             if (!usedVouch[_vouches[i]] && submissions[_vouches[i]].registered && now - submissions[_vouches[i]].submissionTime <= submissionDuration &&
             vouches[_vouches[i]][_submissionID] == true) {
@@ -523,7 +523,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             loser = Party.Challenger;
         else if (winner == Party.Challenger)
             loser = Party.Requester;
-        require(_side!=loser || (now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2), "Not in loser's appeal period");
+        require(_side != loser || (now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2), "Not in loser's appeal period");
 
         if (_side == winner)
             multiplier = winnerStakeMultiplier;
@@ -815,7 +815,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                     request.resolved = true;
                 }
                 // Store the challenger that made the requester lose. Update the challenger if there is a duplicate with lower submission time, which is indicated by submission's array index.
-                if (_ruling==uint(Party.Challenger) && (request.ultimateChallenger==address(0x0) || challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
+                if (_ruling == uint(Party.Challenger) && (request.ultimateChallenger == address(0x0) || challenge.duplicateSubmissionIndex < request.currentDuplicateIndex)) {
                     request.ultimateChallenger = challenge.challenger;
                     request.currentDuplicateIndex = challenge.duplicateSubmissionIndex;
                 }
