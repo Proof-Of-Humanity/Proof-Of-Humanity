@@ -505,12 +505,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _side The recipient of the contribution.
      */
     function fundAppeal(address _submissionID, uint _challengeID, Party _side) external payable {
+        Submission storage submission = submissions[_submissionID];
         require(_side == Party.Requester || _side == Party.Challenger, "Invalid Party");
-        require(
-            submissions[_submissionID].status == Status.PendingRegistration || submissions[_submissionID].status == Status.PendingRemoval,
-            "Submission status invalid"
-        );
-        Request storage request = submissions[_submissionID].requests[submissions[_submissionID].requests.length - 1];
+        require(submission.status == Status.PendingRegistration || submission.status == Status.PendingRemoval, "Submission status invalid");
+
+        Request storage request = submission.requests[submission.requests.length - 1];
         require(request.disputed, "No dispute was raised");
         (uint appealPeriodStart, uint appealPeriodEnd) = request.arbitrator.appealPeriod(request.disputeIDs[_challengeID]);
         require(now >= appealPeriodStart && now < appealPeriodEnd, "Not in appeal period");
@@ -533,14 +532,12 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             multiplier = sharedStakeMultiplier;
 
         Round storage round = request.rounds[_challengeID][request.rounds[_challengeID].length - 1];
-
         uint appealCost = request.arbitrator.appealCost(request.disputeIDs[_challengeID], request.arbitratorExtraData);
         uint totalCost = appealCost.addCap((appealCost.mulCap(multiplier)) / MULTIPLIER_DIVISOR);
         contribute(round, _side, msg.sender, msg.value, totalCost);
 
-        if (round.paidFees[uint(_side)] >= totalCost) {
+        if (round.paidFees[uint(_side)] >= totalCost)
             round.hasPaid[uint(_side)] = true;
-        }
 
         if (round.hasPaid[uint(Party.Challenger)] && round.hasPaid[uint(Party.Requester)]) {
             request.arbitrator.appeal.value(appealCost)(request.disputeIDs[_challengeID], request.arbitratorExtraData);
