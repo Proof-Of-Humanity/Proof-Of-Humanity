@@ -66,7 +66,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         bool disputed; // True if a dispute was raised. Note that the request can enter disputed state multiple times, once per reason.
         bool resolved; // True if the request is executed and/or all raised disputes are resolved.
         address payable requester; // Address that made a request. It matches submissionID in case of registration requests.
-        uint[] disputeIDs; // Stores the IDs of all disputes that were raised during challenge period. disputeIDs[challengeID].
+        uint[] disputeIDs; // Stores the IDs of all disputes that were raised during challenge period. disputeIDs[challengeID - 1].
         uint lastStatusChange; // Time when submission's status was last updated. Is used to track when the challenge period ends.
         Round[][] rounds; // Tracks each round of each dispute that was raised during the challenge period. rounds[challengeID][roundID].
         mapping(uint => uint) rulings; // Maps a dispute index with a ruling given to it. rulings[challengeID].
@@ -466,7 +466,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             request.currentReason = _reason;
         }
 
-        Round storage round = request.rounds[request.disputeIDs.length][0];
+        Round storage round = request.rounds[request.disputeIDs.length + 1][0];
         uint arbitrationCost = request.arbitrator.arbitrationCost(request.arbitratorExtraData);
         uint totalCost = arbitrationCost.addCap((arbitrationCost.mulCap(sharedStakeMultiplier)) / MULTIPLIER_DIVISOR).addCap(submissionChallengeBaseDeposit);
         contribute(round, Party.Challenger, msg.sender, msg.value, totalCost);
@@ -478,8 +478,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.nbParallelDisputes++;
 
         Challenge storage challenge = arbitratorDisputeIDToChallenge[address(request.arbitrator)][request.disputeIDs[request.disputeIDs.length - 1]];
-        // The index of the challenge is equal to the index of a newly created dispute in disputeIDs array.
-        challenge.challengeID = request.disputeIDs.length - 1;
+        // The index of the challenge is equal to the index+1 of a newly created dispute in disputeIDs array. Index 0 is reserve for the initial submission.
+        challenge.challengeID = request.disputeIDs.length;
         challenge.challenger = msg.sender;
         challenge.challengedSubmission = _submissionID;
         challenge.duplicateSubmissionIndex = submissions[_duplicateID].index;
@@ -532,7 +532,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             multiplier = sharedStakeMultiplier;
 
         Round storage round = request.rounds[_challengeID][request.rounds[_challengeID].length - 1];
-        uint appealCost = request.arbitrator.appealCost(request.disputeIDs[_challengeID], request.arbitratorExtraData);
+        uint appealCost = request.arbitrator.appealCost(request.disputeIDs[_challengeID - 1], request.arbitratorExtraData);
         uint totalCost = appealCost.addCap((appealCost.mulCap(multiplier)) / MULTIPLIER_DIVISOR);
         contribute(round, _side, msg.sender, msg.value, totalCost);
 
@@ -540,7 +540,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.hasPaid[uint(_side)] = true;
 
         if (round.hasPaid[uint(Party.Challenger)] && round.hasPaid[uint(Party.Requester)]) {
-            request.arbitrator.appeal.value(appealCost)(request.disputeIDs[_challengeID], request.arbitratorExtraData);
+            request.arbitrator.appeal.value(appealCost)(request.disputeIDs[_challengeID - 1], request.arbitratorExtraData);
             request.rounds[_challengeID].length++;
             round.feeRewards = round.feeRewards.subCap(appealCost);
         }
@@ -629,21 +629,36 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             
             round.contributions[_beneficiary][uint(Party.Requester)] = 0;
             round.contributions[_beneficiary][uint(Party.Challenger)] = 0;
-        } else {
-            // Give the winner the reward for rounds he might not have been able to contribute to.
-            // Challenger, who ultimately wins, will be able to get the deposit of the requester, even if he didn't participate in the initial dispute.
-            // Requester, if wins a dispute, will be able to get the deposit of the challenger of said dispute, even if he ultimately loses a request. This does not apply to the initial dispute, however.
-            if (_round == 0 && ((_beneficiary == request.ultimateChallenger && _challengeID == 0) ||
-               (_beneficiary == request.requester && _challengeID > 0 && request.rulings[_challengeID] == uint(Party.Requester)))) {
+        } else if (_round == 0) {
+            if (_beneficiary == request.ultimateChallenger && _challengeID == 0) {
+                // Reward the ultimate challenger with the requester fees.
                 reward = round.feeRewards;
                 round.feeRewards = 0;
-            // This condition will prevent claiming a reward, intended for the ultimate challenger.
-            } else if (request.ultimateChallenger==address(0x0) || _challengeID!=0 || _round!=0) {
-                reward = round.paidFees[request.rulings[_challengeID]] > 0
-                    ? (round.contributions[_beneficiary][request.rulings[_challengeID]] * round.feeRewards) / round.paidFees[request.rulings[_challengeID]]
-                    : 0;
-                round.contributions[_beneficiary][request.rulings[_challengeID]] = 0;
+            } else if (_challengeID > 0 && request.rulings[_challengeID] != uint(Party.Requester) && round.contributions[_beneficiary][uint(Party.Challenger)] > 0) {
+                // Let the challenger recover his fees if he didn't lose.
+                reward = round.feeRewards;
+                round.feeRewards = 0;
+            } else if (_challengeID > 0 && request.rulings[_challengeID] == uint(Party.Requester)) {
+                // Reward requester's supporters with the challenger fees
+                Round storage requesterRound = request.rounds[0][0];
+                if (round.contributions[_beneficiary][uint(Party.Requester)] == 0) {
+                    // Allow the requester to only collect the rewards once
+                    round.contributions[_beneficiary][uint(Party.Requester)] = requesterRound.contributions[_beneficiary][uint(Party.Requester)];
+                    reward = (requesterRound.contributions[_beneficiary][uint(Party.Requester)] * round.feeRewards) / requesterRound.paidFees[uint(Party.Requester)];
+                }
+            } else if (request.ultimateChallenger == address(0x0) && _challengeID == 0) {
+                // Let the requester's supporters recover their fees.
+                if (round.contributions[_beneficiary][uint(Party.None)] == 0) {
+                    // Allow the requester to only collect the fees once
+                    round.contributions[_beneficiary][uint(Party.None)] = round.contributions[_beneficiary][uint(Party.Requester)];
+                    reward = (round.contributions[_beneficiary][uint(Party.Requester)] * round.feeRewards) / round.paidFees[uint(Party.Requester)];
+                }
             }
+        } else {
+            reward = round.paidFees[request.rulings[_challengeID]] > 0
+                ? (round.contributions[_beneficiary][request.rulings[_challengeID]] * round.feeRewards) / round.paidFees[request.rulings[_challengeID]]
+                : 0;
+            round.contributions[_beneficiary][request.rulings[_challengeID]] = 0;
         }
         _beneficiary.send(reward);
     }
@@ -713,8 +728,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         } else
             request.metaEvidenceID = 2 * metaEvidenceUpdates;
 
-        if (round.paidFees[uint(Party.Requester)] >= totalCost)
+        if (round.paidFees[uint(Party.Requester)] >= totalCost) {
             round.hasPaid[uint(Party.Requester)] = true;
+            request.rounds[request.rounds.length++].length++;
+            request.rulings[0] = uint(-1); // disputes start at request.ruling[i] where i > 0.
+        }
 
         if (bytes(_evidence).length > 0)
             emit Evidence(request.arbitrator, uint(keccak256(abi.encodePacked(_submissionID, 0))), msg.sender, _evidence);
@@ -775,6 +793,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             submission.registered = winner == Party.Requester ? false : true;
             submission.status = Status.None;
             request.resolved = true;
+            request.ultimateChallenger = winner == Party.Challenger ? challenge.challenger : address(0x0);
         } else if (submission.status == Status.PendingRegistration) {
             // For a registration request there can be many disputes
             if (winner == Party.Requester) {
@@ -895,9 +914,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         )
     {
         Request storage request = submissions[_submissionID].requests[_request];
+        require(_challengeID > 0, "Invalid challengeID");
         return (
             request.rounds[_challengeID].length,
-            request.disputeIDs[_challengeID],
+            request.disputeIDs[_challengeID - 1],
             request.rulings[_challengeID]
         );
     }
