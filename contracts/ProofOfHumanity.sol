@@ -143,7 +143,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     mapping(address => mapping(address => bool)) public vouches; // Indicates whether or not the voucher has vouched for a certain submission. vouches[voucherID][submissionID].
     mapping(address => bool) public usedVouch; // Indicates whether or not the voucher has vouched for a submission that entered PendingRegistration state. usedVouch[voucherID].
 
-    mapping(address => mapping(uint => DisputeData)) public arbitratorDisputeIDToDisputeData; // Maps a dispute ID with the data of the challenger who created a dispute. arbitratorDisputeIDToChallenge[arbitrator][disputeID].
+    mapping(address => mapping(uint => DisputeData)) public arbitratorDisputeIDToDisputeData; // Maps a dispute ID with its data. arbitratorDisputeIDToChallenge[arbitrator][disputeID].
 
      /* Modifiers */
 
