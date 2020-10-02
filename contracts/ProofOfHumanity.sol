@@ -145,7 +145,23 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     mapping(address => mapping(uint => DisputeData)) public arbitratorDisputeIDToDisputeData; // Maps a dispute ID with its data. arbitratorDisputeIDToDisputeData[arbitrator][disputeID].
 
-     /* Modifiers */
+    /* Events */
+
+    /**
+     *  @dev Emitted when a vouch is added.
+     *  @param _submissionID The submission that receives the vouch.
+     *  @param _voucher The address that vouched.
+     */
+    event VouchAdded(address indexed _submissionID, address _voucher);
+
+    /**
+     *  @dev Emitted when a vouch is removed.
+     *  @param _submissionID The submission which vouch is removed.
+     *  @param _voucher The address that removes its vouch.
+     */
+    event VouchRemoved(address indexed _submissionID, address _voucher);
+
+    /* Modifiers */
 
     modifier onlyByGovernor() {require(governor == msg.sender, "The caller must be the governor."); _;}
 
@@ -379,6 +395,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         require(submission.status == Status.Vouching, "Wrong status");
         require(_submissionID != msg.sender, "Can not vouch for yourself");
         vouches[msg.sender][_submissionID] = true;
+        emit VouchAdded(_submissionID, msg.sender);
     }
 
     /** @dev Remove the submission's vouch that has been added earlier.
@@ -388,6 +405,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Wrong status");
         vouches[msg.sender][_submissionID] = false;
+        emit VouchRemoved(_submissionID, msg.sender);
     }
 
     /** @dev Allows to withdraw a mistakenly added submission while it's still in a vouching state.
