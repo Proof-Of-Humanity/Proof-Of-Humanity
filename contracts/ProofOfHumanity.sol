@@ -161,6 +161,33 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     event VouchRemoved(address indexed _submissionID, address _voucher);
 
+    /** @dev Emitted when the reapplication request is made.
+     *  @param _submissionID The ID of the submission.
+     *  @param _requestID The ID of the newly created request.
+     */
+    event SubmissionReapplied(address indexed _submissionID, uint _requestID);
+
+    /** @dev Emitted when the submission is challenged.
+     *  @param _submissionID The ID of the submission.
+     *  @param _requestID The ID of the latest request.
+     *  @param _challengeID The ID of the challenge.
+     */
+    event SubmissionChallenged(address indexed _submissionID, uint indexed _requestID, uint _challengeID);
+
+    /** @dev Emitted when one of the parties successfully paid its appeal fees.
+     *  @param _submissionID The ID of the submission.
+     *  @param _challengeID The index of the challenge which appeal was funded.
+     *  @param _side The side that is fully funded.
+     */
+    event HasPaidAppealFee(address indexed _submissionID, uint indexed _challengeID, Party _side);
+
+    /** @dev Emitted when the challenge is resolved.
+     *  @param _submissionID The ID of the submission.
+     *  @param _requestID The ID of the latest request.
+     *  @param _challengeID The ID of the challenge that was resolved.
+     */
+    event ChallengeResolved(address indexed _submissionID, uint indexed _requestID, uint _challengeID);
+
     /* Modifiers */
 
     modifier onlyByGovernor() {require(governor == msg.sender, "The caller must be the governor."); _;}
@@ -353,6 +380,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         require(submission.registered && submission.status == Status.None, "Wrong status");
         require(now >= submission.renewalTimestamp, "Can't reapply yet");
         submission.status = Status.Vouching;
+        emit SubmissionReapplied(msg.sender, submission.requests.length);
         requestStatusChange(msg.sender, _evidence);
     }
 
@@ -470,7 +498,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             require(request.currentReason == _reason || request.currentReason == Reason.None, "Another reason is active");
         }
         else {
-            require(!request.disputed, "The requiest is disputed");
+            require(!request.disputed, "The request is disputed");
             require(_duplicateID == address(0x0), "DuplicateID should be empty");
         }
 
@@ -503,6 +531,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.nbParallelDisputes++;
 
         challenge.rounds.length++;
+        emit SubmissionChallenged(_submissionID, submission.requests.length - 1, request.nbChallenges - 1);
+
         request.nbChallenges++;
         submissionChallenges[_submissionID][submission.requests.length - 1][request.nbChallenges - 1].rounds.length++;
 
@@ -527,7 +557,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.PendingRegistration || submission.status == Status.PendingRemoval, "Wrong status");
         Request storage request = submission.requests[submission.requests.length - 1];
-        require(request.disputed, "No dispute to appeal");
+        require(request.disputed);
+        require(_challengeID < request.nbChallenges);
 
         Challenge storage challenge = submissionChallenges[_submissionID][submission.requests.length - 1][_challengeID];
 
@@ -559,6 +590,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         if (round.paidFees[uint(_side)] >= totalCost) {
             round.hasPaid[uint(_side)] = true;
+            emit HasPaidAppealFee(_submissionID, _challengeID, _side);
         }
 
         if (round.hasPaid[uint(Party.Challenger)] && round.hasPaid[uint(Party.Requester)]) {
@@ -835,6 +867,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         // Decrease the number of parallel disputes each time the dispute is resolved. Store the rulings of each dispute for correct distribution of rewards.
         request.nbParallelDisputes--;
         challenge.ruling = _ruling.toUint64();
+        emit ChallengeResolved(_submissionID, submission.requests.length - 1, _challengeID);
 
         if ((request.requesterLost || request.usedReasons.length == NB_REASONS) && request.nbParallelDisputes == 0)
             request.resolved = true;
