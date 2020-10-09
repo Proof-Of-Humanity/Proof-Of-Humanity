@@ -1,6 +1,5 @@
 /* eslint-disable no-undef */ // Avoid the linter considering truffle elements as undef.
 const { BN, expectRevert, time } = require('openzeppelin-test-helpers')
-const { soliditySha3 } = require('web3-utils')
 
 const ProofOfHumanity = artifacts.require('ProofOfHumanity')
 const Arbitrator = artifacts.require('EnhancedAppealableArbitrator')
@@ -24,7 +23,7 @@ contract('ProofOfHumanity', function(accounts) {
   const submissionBaseDeposit = 5000
   const submissionDuration = 86400
   const challengePeriodDuration = 600
-  const renewalTime = 6000
+  const renewalPeriodDuration = 6000
   const nbVouches = 2
 
   const appealTimeOut = 180
@@ -64,7 +63,7 @@ contract('ProofOfHumanity', function(accounts) {
       clearingMetaEvidence,
       submissionBaseDeposit,
       submissionDuration,
-      renewalTime,
+      renewalPeriodDuration,
       challengePeriodDuration,
       sharedStakeMultiplier,
       winnerStakeMultiplier,
@@ -89,7 +88,7 @@ contract('ProofOfHumanity', function(accounts) {
     assert.equal(await proofH.governor(), governor)
     assert.equal(await proofH.submissionBaseDeposit(), submissionBaseDeposit)
     assert.equal(await proofH.submissionDuration(), submissionDuration)
-    assert.equal(await proofH.renewalTime(), renewalTime)
+    assert.equal(await proofH.renewalPeriodDuration(), renewalPeriodDuration)
     assert.equal(
       await proofH.challengePeriodDuration(),
       challengePeriodDuration
@@ -98,6 +97,12 @@ contract('ProofOfHumanity', function(accounts) {
     assert.equal(await proofH.winnerStakeMultiplier(), winnerStakeMultiplier)
     assert.equal(await proofH.loserStakeMultiplier(), loserStakeMultiplier)
     assert.equal(await proofH.requiredNumberOfVouches(), nbVouches)
+
+    const arbitratorData = await proofH.arbitratorDataList(0)
+    assert.equal(arbitratorData[0], arbitrator.address)
+    assert.equal(arbitratorData[1], 0)
+    assert.equal(arbitratorData[2], arbitratorExtraData)
+    assert.equal(await proofH.getArbitratorDataListCount(), 1)
   })
 
   it('Should set correct values in manually added submissions', async () => {
@@ -108,7 +113,7 @@ contract('ProofOfHumanity', function(accounts) {
       'First submission has incorrect status'
     )
     assert.equal(
-      submission1[5].toNumber(),
+      submission1[6].toNumber(),
       1,
       'First submission has incorrect number of requests'
     )
@@ -117,6 +122,11 @@ contract('ProofOfHumanity', function(accounts) {
       request1[1],
       true,
       'The request of the first submission should be resolved'
+    )
+    assert.equal(
+      request1[6].toNumber(),
+      0,
+      'The request of the first submission has incorrect arbitrator data ID'
     )
     assert.equal(
       submission1[3].toNumber(),
@@ -133,7 +143,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Second submission has incorrect status'
     )
     assert.equal(
-      submission2[5].toNumber(),
+      submission2[6].toNumber(),
       1,
       'Second submission has incorrect number of requests'
     )
@@ -142,6 +152,11 @@ contract('ProofOfHumanity', function(accounts) {
       request2[1],
       true,
       'The request of the second submission should be resolved'
+    )
+    assert.equal(
+      request1[6].toNumber(),
+      0,
+      'The request of the second submission has incorrect arbitrator data ID'
     )
 
     assert.equal(
@@ -173,6 +188,9 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should set correct values after creating a request to add new submission', async () => {
+    // Change metaevidence so arbitrator data ID is not 0
+    await proofH.changeMetaEvidence('1', '2', { from: governor })
+
     const oldBalance = await web3.eth.getBalance(requester)
     const txAddSubmission = await proofH.addSubmission('evidence1', {
       from: requester,
@@ -184,7 +202,7 @@ contract('ProofOfHumanity', function(accounts) {
     const submission = await proofH.getSubmissionInfo(requester)
     assert.equal(submission[0].toNumber(), 1, 'Submission has incorrect status')
     assert.equal(
-      submission[5].toNumber(),
+      submission[6].toNumber(),
       1,
       'Submission has incorrect number of requests'
     )
@@ -195,16 +213,23 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     const request = await proofH.getRequestInfo(requester, 0)
-    assert.equal(request[7], requester, 'Requester was not set up properly')
     assert.equal(
-      request[9],
+      request[6].toNumber(),
+      1,
+      'Arbitrator data ID was not set up properly'
+    )
+    assert.equal(request[7], requester, 'Requester was not set up properly')
+
+    const arbitratorData = await proofH.arbitratorDataList(1)
+    assert.equal(
+      arbitratorData[0],
       arbitrator.address,
-      'Request arbitrator was not set up properly'
+      'Arbitrator was not set up properly'
     )
     assert.equal(
-      request[10],
+      arbitratorData[2],
       arbitratorExtraData,
-      'Request extra data was not set up properly'
+      'Extra data was not set up properly'
     )
 
     const round = await proofH.getRoundInfo(requester, 0, 0, 0)
@@ -245,13 +270,6 @@ contract('ProofOfHumanity', function(accounts) {
       'The requester has incorrect balance after making a submission'
     )
 
-    const evidenceGroupID = parseInt(
-      soliditySha3(
-        requester,
-        0 // Number of requests - 1
-      ),
-      16
-    )
     assert.equal(
       txAddSubmission.logs[0].event,
       'Evidence',
@@ -262,11 +280,13 @@ contract('ProofOfHumanity', function(accounts) {
       arbitrator.address,
       'The event has wrong arbitrator address'
     )
+    /* TODO
     assert.equal(
       txAddSubmission.logs[0].args._evidenceGroupID,
       evidenceGroupID,
       'The event has wrong evidence group ID'
     )
+    */
     assert.equal(
       txAddSubmission.logs[0].args._party,
       requester,
@@ -440,7 +460,7 @@ contract('ProofOfHumanity', function(accounts) {
     const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(submission[0].toNumber(), 3, 'Submission has incorrect status')
     assert.equal(
-      submission[5].toNumber(),
+      submission[6].toNumber(),
       2,
       'Submission has incorrect number of requests'
     )
@@ -498,7 +518,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     // Check that it's not possible to make a request during renewal period.
-    await time.increase(submissionDuration - renewalTime)
+    await time.increase(submissionDuration - renewalPeriodDuration)
     await expectRevert(
       proofH.removeSubmission(voucher2, 'evidence1', {
         from: requester,
@@ -513,13 +533,13 @@ contract('ProofOfHumanity', function(accounts) {
       proofH.reapplySubmission('.json', { from: voucher1 }),
       "Can't reapply yet"
     )
-    await time.increase(submissionDuration - renewalTime)
+    await time.increase(submissionDuration - renewalPeriodDuration)
 
     await proofH.reapplySubmission('.json', { from: voucher1 })
     const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(submission[0].toNumber(), 1, 'Submission has incorrect status')
     assert.equal(
-      submission[5].toNumber(),
+      submission[6].toNumber(),
       2,
       'Submission has incorrect number of requests'
     )
@@ -547,7 +567,7 @@ contract('ProofOfHumanity', function(accounts) {
 
     await expectRevert(
       proofH.addVouch(requester, { from: requester }),
-      'Can not vouch for yourself'
+      "Can't vouch for yourself"
     )
 
     const txVouchAdd = await proofH.addVouch(requester, { from: voucher1 })
@@ -620,16 +640,10 @@ contract('ProofOfHumanity', function(accounts) {
     const submission = await proofH.getSubmissionInfo(requester)
     assert.equal(submission[0].toNumber(), 2, 'Submission has incorrect status')
 
-    assert.equal(
-      await proofH.usedVouch(voucher1),
-      true,
-      'First voucher should be marked as used'
-    )
-    assert.equal(
-      await proofH.usedVouch(voucher2),
-      true,
-      'Second voucher should be marked as used'
-    )
+    const voucher1Info = await proofH.getSubmissionInfo(voucher1)
+    assert.equal(voucher1Info[5], true, 'Did not register the first vouch')
+    const voucher2Info = await proofH.getSubmissionInfo(voucher2)
+    assert.equal(voucher2Info[5], true, 'Did not register the second vouch')
 
     const storedVouches = (
       await proofH.getNumberOfVouches(requester, 0)
@@ -724,21 +738,20 @@ contract('ProofOfHumanity', function(accounts) {
       [voucher1, voucher2, voucher3],
       { from: governor }
     )
+    const voucher1Info = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      await proofH.usedVouch(voucher1),
+      voucher1Info[5],
       true,
       'First voucher should be marked as used'
     )
+    const voucher2Info = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      await proofH.usedVouch(voucher2),
+      voucher2Info[5],
       true,
       'Second voucher should be marked as used'
     )
-    assert.equal(
-      await proofH.usedVouch(voucher3),
-      false,
-      'Third voucher should not be used'
-    )
+    const voucher3Info = await proofH.getSubmissionInfo(voucher3)
+    assert.equal(voucher3Info[5], false, 'Third voucher should not be used')
   })
 
   it('Should set correct values and create a dispute after the submission is challenged', async () => {
@@ -751,7 +764,7 @@ contract('ProofOfHumanity', function(accounts) {
         'evidence2',
         { from: challenger1, value: 1e18 }
       ),
-      'The submission must have a pending status.'
+      'Wrong status'
     )
     await expectRevert(
       proofH.challengeRequest(
@@ -761,7 +774,7 @@ contract('ProofOfHumanity', function(accounts) {
         'evidence2',
         { from: challenger1, value: 1e18 }
       ),
-      'The submission must have a pending status.'
+      'Wrong status'
     )
 
     await proofH.addSubmission('', {
@@ -779,7 +792,7 @@ contract('ProofOfHumanity', function(accounts) {
         'evidence2',
         { from: challenger1, value: 1e18 }
       ),
-      'The submission must have a pending status.'
+      'Wrong status'
     )
 
     await proofH.changeStateToPending(requester, [voucher1, voucher2], {
@@ -795,14 +808,14 @@ contract('ProofOfHumanity', function(accounts) {
         'evidence2',
         { from: challenger1, value: 1e18 }
       ),
-      'Reason should be specified'
+      'Reason must be specified'
     )
     await expectRevert(
       proofH.challengeRequest(requester, 2, voucher1, 'evidence2', {
         from: challenger1,
         value: 1e18
       }),
-      'DuplicateID should be empty'
+      'DuplicateID must be empty'
     )
     await expectRevert(
       proofH.challengeRequest(
@@ -871,11 +884,7 @@ contract('ProofOfHumanity', function(accounts) {
       2,
       'The number of challenges of the request is incorrect'
     )
-    assert.equal(
-      request[6].toNumber(),
-      1,
-      'The number of reasons of the request is incorrect'
-    )
+    assert.equal(request[9].toNumber(), 2, 'Incorrect reasons bitmap value')
 
     const challengeInfo = await proofH.getChallengeInfo(requester, 0, 0)
     assert.equal(
@@ -938,65 +947,59 @@ contract('ProofOfHumanity', function(accounts) {
       'Number of choices not set up properly'
     )
 
-    // Check that the events have been created.
-    const evidenceGroupID = parseInt(
-      soliditySha3(
-        requester,
-        0 // Number of requests - 1
-      ),
-      16
-    )
-
-    assert.equal(
-      txChallenge.logs[0].event,
-      'Dispute',
-      'The first event has not been created'
-    )
-    assert.equal(
-      txChallenge.logs[0].args._arbitrator,
-      arbitrator.address,
-      'The first event has wrong arbitrator address'
-    )
-    assert.equal(
-      txChallenge.logs[0].args._disputeID.toNumber(),
-      1,
-      'The first event has wrong dispute ID'
-    )
-    assert.equal(
-      txChallenge.logs[0].args._metaEvidenceID.toNumber(),
-      0,
-      'The first event has wrong metaevidence ID'
-    )
-    assert.equal(
-      txChallenge.logs[0].args._evidenceGroupID,
-      evidenceGroupID,
-      'The first event has wrong evidence group ID'
-    )
-
     assert.equal(
       txChallenge.logs[1].event,
-      'Evidence',
-      'The second event has not been created'
+      'Dispute',
+      'The Dispute event has not been created'
     )
     assert.equal(
       txChallenge.logs[1].args._arbitrator,
       arbitrator.address,
-      'The second event has wrong arbitrator address'
+      'The Dispute event has wrong arbitrator address'
     )
+    assert.equal(
+      txChallenge.logs[1].args._disputeID.toNumber(),
+      1,
+      'The Dispute event has wrong dispute ID'
+    )
+    assert.equal(
+      txChallenge.logs[1].args._metaEvidenceID.toNumber(),
+      0,
+      'The Dispute event has wrong metaevidence ID'
+    )
+    /* TODO
     assert.equal(
       txChallenge.logs[1].args._evidenceGroupID,
       evidenceGroupID,
-      'The second event has wrong evidence group ID'
+      'The Dispute event has wrong evidence group ID'
+    )
+    */
+    assert.equal(
+      txChallenge.logs[2].event,
+      'Evidence',
+      'The Evidence event has not been created'
     )
     assert.equal(
-      txChallenge.logs[1].args._party,
+      txChallenge.logs[2].args._arbitrator,
+      arbitrator.address,
+      'The Evidence event has wrong arbitrator address'
+    )
+    /* TODO
+    assert.equal(
+      txChallenge.logs[2].args._evidenceGroupID,
+      evidenceGroupID,
+      'The Evidence event has wrong evidence group ID'
+    )
+    */
+    assert.equal(
+      txChallenge.logs[2].args._party,
       challenger1,
-      'The second event has wrong challenger address'
+      'The Evidence event has wrong challenger address'
     )
     assert.equal(
-      txChallenge.logs[1].args._evidence,
+      txChallenge.logs[2].args._evidence,
       'evidence2',
-      'The second event has incorrect evidence'
+      'The Evidence event has incorrect evidence'
     )
     // Check that the request can't just be executed after challenge.
     await time.increase(challengePeriodDuration + 1)
@@ -1064,6 +1067,20 @@ contract('ProofOfHumanity', function(accounts) {
       from: challenger1,
       value: arbitrationCost
     })
+
+    await expectRevert(
+      proofH.challengeRequest(requester, 3, voucher2, '', {
+        from: challenger1,
+        value: arbitrationCost
+      }),
+      'Duplicate address already used'
+    )
+    assert.equal(
+      await proofH.checkRequestDuplicates(requester, 0, voucher2),
+      true,
+      'The duplicate should be marked as used'
+    )
+
     await proofH.challengeRequest(requester, 3, voucher3, '', {
       from: challenger2,
       value: arbitrationCost
@@ -1081,9 +1098,9 @@ contract('ProofOfHumanity', function(accounts) {
       'The number of challenges of the request is incorrect'
     )
     assert.equal(
-      request[6].toNumber(),
-      1,
-      'The number of reasons of the request is incorrect'
+      request[9].toNumber(),
+      4,
+      'The reasons bitmap of the request is incorrect'
     )
 
     const challengeInfo1 = await proofH.getChallengeInfo(requester, 0, 0)
@@ -1210,11 +1227,7 @@ contract('ProofOfHumanity', function(accounts) {
       2,
       'The number of challenges of the removal request is incorrect'
     )
-    assert.equal(
-      request[6].toNumber(),
-      0,
-      'The number of reasons of the removal request should be 0'
-    )
+    assert.equal(request[9].toNumber(), 0, 'The reasons bitmap should be empty')
   })
 
   it('Should successfully execute a request if it has not been challenged', async () => {
@@ -1651,7 +1664,7 @@ contract('ProofOfHumanity', function(accounts) {
     let request = await proofH.getRequestInfo(requester, 0)
     assert.equal(request[1], false, 'The request should not be resolved yet')
     assert.equal(request[5].toNumber(), 5, 'Incorrect number of challenges')
-    assert.equal(request[6].toNumber(), 3, 'Incorrect number of reasons')
+    assert.equal(request[9].toNumber(), 7, 'Incorrect reasons bitmap')
     // Check the data of a random challenge as well.
     const challengeInfo = await proofH.getChallengeInfo(requester, 0, 3)
     assert.equal(
@@ -1684,9 +1697,9 @@ contract('ProofOfHumanity', function(accounts) {
       'Should not be any parallel disputes'
     )
     assert.equal(
-      request[6].toNumber(),
-      4,
-      'Incorrect number of reasons in the end'
+      request[9].toNumber(),
+      15,
+      'Incorrect reasons bitmap in the end'
     )
 
     submission = await proofH.getSubmissionInfo(requester)
@@ -1990,19 +2003,21 @@ contract('ProofOfHumanity', function(accounts) {
     await time.increase(appealTimeOut + 1)
     await expectRevert(
       proofH.processVouches(requester, 0, 1, { from: governor }),
-      'Submission should be resolved'
+      'Submission must be resolved'
     )
     // Let challenger win to make the test more transparent.
     await arbitrator.giveRuling(1, 2)
 
     await proofH.processVouches(requester, 0, 1, { from: governor })
+    const voucher1Info = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      await proofH.usedVouch(voucher1),
+      voucher1Info[5],
       false,
       'First voucher should not be marked as used'
     )
+    let voucher2Info = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      await proofH.usedVouch(voucher2),
+      voucher2Info[5],
       true,
       'Second voucher should still be marked as used'
     )
@@ -2014,8 +2029,9 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     await proofH.processVouches(requester, 0, 1, { from: governor })
+    voucher2Info = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      await proofH.usedVouch(voucher2),
+      voucher2Info[5],
       false,
       'Second voucher should not be marked as used'
     )
@@ -2029,7 +2045,7 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Should correctly penalize vouchers that vote for a bad submission', async () => {
     // Make it so one of the vouchers is in the middle of reapplication process.
-    await time.increase(submissionDuration - renewalTime)
+    await time.increase(submissionDuration - renewalPeriodDuration)
 
     await proofH.addSubmission('', {
       from: requester,
@@ -2127,7 +2143,7 @@ contract('ProofOfHumanity', function(accounts) {
       proofH.withdrawFeesAndRewards(challenger2, requester, 0, 0, 0, {
         from: governor
       }),
-      'Submission should be resolved'
+      'Submission must be resolved'
     )
     await arbitrator.giveRuling(2, 2)
 
@@ -2140,7 +2156,7 @@ contract('ProofOfHumanity', function(accounts) {
         0,
         { from: governor }
       ),
-      'Beneficiary should not be empty'
+      'Beneficiary must not be empty'
     )
     const oldBalanceRequester = await web3.eth.getBalance(requester)
     await proofH.withdrawFeesAndRewards(requester, requester, 0, 0, 0, {
@@ -2331,16 +2347,16 @@ contract('ProofOfHumanity', function(accounts) {
       28,
       'Incorrect submissionDuration value'
     )
-    // renewalTime
+    // renewalPeriodDuration
     await expectRevert(
-      proofH.changeRenewalTime(94, { from: other }),
+      proofH.changeRenewalPeriodDuration(94, { from: other }),
       'The caller must be the governor.'
     )
-    await proofH.changeRenewalTime(94, { from: governor })
+    await proofH.changeRenewalPeriodDuration(94, { from: governor })
     assert.equal(
-      (await proofH.renewalTime()).toNumber(),
+      (await proofH.renewalPeriodDuration()).toNumber(),
       94,
-      'Incorrect renewalTime value'
+      'Incorrect renewalPeriodDuration value'
     )
     // challengePeriodDuration
     await expectRevert(
