@@ -485,11 +485,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
-            Submission storage vouch = submissions[_vouches[i]];
-            if (!vouch.hasVouched && vouch.registered && now - vouch.submissionTime <= submissionDuration &&
+            Submission storage voucher = submissions[_vouches[i]];
+            if (!voucher.hasVouched && voucher.registered && now - voucher.submissionTime <= submissionDuration &&
             vouches[_vouches[i]][_submissionID] == true) {
                 request.vouches.push(_vouches[i]);
-                submissions[_vouches[i]].hasVouched = true;
+                voucher.hasVouched = true;
             }
         }
         require(request.vouches.length >= requiredNumberOfVouches, "Not enough valid vouches");
@@ -838,22 +838,20 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Execute the ruling of a dispute.
      *  @param _submissionID ID of the submission.
      *  @param _challengeID ID of the challenge, related to the dispute.
-     *  @param _ruling Ruling given by the arbitrator. Note that 0 is reserved for "Refused to arbitrate".
+     *  @param _winner Ruling given by the arbitrator. Note that 0 is reserved for "Refused to arbitrate".
      */
-    function executeRuling(address _submissionID, uint _challengeID, Party _ruling) internal {
+    function executeRuling(address _submissionID, uint _challengeID, Party _winner) internal {
         Submission storage submission = submissions[_submissionID];
         Request storage request = submission.requests[submission.requests.length - 1];
         Challenge storage challenge = request.challenges[_challengeID];
 
-        Party winner = _ruling;
-
         if (submission.status == Status.PendingRemoval) {
-            submission.registered = winner == Party.Requester ? false : true;
+            submission.registered = _winner == Party.Requester ? false : true;
             submission.status = Status.None;
             request.resolved = true;
         } else if (submission.status == Status.PendingRegistration) {
             // For a registration request there can be more than one dispute.
-            if (winner == Party.Requester) {
+            if (_winner == Party.Requester) {
                 if (request.nbParallelDisputes == 1) {
                     // Check whether or not the requester won all of his previous disputes for current reason.
                     if (!request.requesterLost) {
@@ -879,7 +877,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                 if (request.nbParallelDisputes == 1)
                     submission.status = Status.None;
                 // Store the challenger that made the requester lose. Update the challenger if there is a duplicate with lower submission time, which is indicated by submission's array index.
-                if (winner==Party.Challenger && (request.ultimateChallenger==address(0x0) || challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
+                if (_winner==Party.Challenger && (request.ultimateChallenger==address(0x0) || challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
                     request.ultimateChallenger = challenge.challenger;
                     request.currentDuplicateIndex = challenge.duplicateSubmissionIndex;
                 }
@@ -889,7 +887,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         }
         // Decrease the number of parallel disputes each time the dispute is resolved. Store the rulings of each dispute for correct distribution of rewards.
         request.nbParallelDisputes--;
-        challenge.ruling = _ruling;
+        challenge.ruling = _winner;
         emit ChallengeResolved(_submissionID, submission.requests.length - 1, _challengeID);
     }
 
