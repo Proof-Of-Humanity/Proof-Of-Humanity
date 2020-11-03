@@ -177,14 +177,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     event SubmissionChallenged(address indexed _submissionID, uint indexed _requestID, uint _challengeID);
 
-    /** @dev To be emitted when someone contributes to the appeal process.
-     *  @param _submissionID The ID of the submission.
-     *  @param _party The party which received the contribution.
-     *  @param _contributor The address of the contributor.
-     *  @param _amount The amount contributed.
-     */
-    event AppealContribution(address indexed _submissionID, Party _party, address indexed _contributor, uint _amount);
-
     /** @dev Emitted when one of the parties successfully paid its appeal fees.
      *  @param _submissionID The ID of the submission.
      *  @param _challengeID The index of the challenge which appeal was funded.
@@ -498,7 +490,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
             Submission storage voucher = submissions[_vouches[i]];
-            if (!voucher.hasVouched && vouches[_vouches[i]][_submissionID] == true) {
+            if (!voucher.hasVouched && voucher.registered && now - voucher.submissionTime <= submissionDuration &&
+            vouches[_vouches[i]][_submissionID] == true) {
                 request.vouches.push(_vouches[i]);
                 voucher.hasVouched = true;
             }
@@ -617,8 +610,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         uint appealCost = arbitratorData.arbitrator.appealCost(challenge.disputeID, arbitratorData.arbitratorExtraData);
         uint totalCost = appealCost.addCap((appealCost.mulCap(multiplier)) / MULTIPLIER_DIVISOR);
-        uint contribution = contribute(round, _side, msg.sender, msg.value, totalCost);
-        emit AppealContribution(_submissionID, _side, msg.sender, contribution);
+        contribute(round, _side, msg.sender, msg.value, totalCost);
 
         if (round.paidFees[uint(_side)] >= totalCost) {
             round.hasPaid[uint(_side)] = true;
