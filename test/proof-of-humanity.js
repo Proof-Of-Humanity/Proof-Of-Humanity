@@ -536,6 +536,12 @@ contract('ProofOfHumanity', function(accounts) {
     await time.increase(submissionDuration - renewalPeriodDuration)
 
     await proofH.reapplySubmission('.json', { from: voucher1 })
+
+    await expectRevert(
+      proofH.addVouch(voucher1, { from: voucher1 }),
+      "Can't vouch for yourself"
+    )
+
     const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(submission[0].toNumber(), 1, 'Submission has incorrect status')
     assert.equal(
@@ -566,11 +572,17 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addSubmission('evidence1', { from: requester })
 
     await expectRevert(
-      proofH.addVouch(requester, { from: requester }),
-      "Can't vouch for yourself"
+      proofH.addVouch(requester, { from: other }),
+      'No right to vouch'
     )
 
     const txVouchAdd = await proofH.addVouch(requester, { from: voucher1 })
+
+    await expectRevert(
+      proofH.addVouch(requester, { from: voucher1 }),
+      'Already vouched for this submission'
+    )
+
     let isVouched = await proofH.vouches(voucher1, requester)
     assert.equal(
       isVouched,
@@ -597,6 +609,12 @@ contract('ProofOfHumanity', function(accounts) {
     const txVouchRemove = await proofH.removeVouch(requester, {
       from: voucher1
     })
+
+    await expectRevert(
+      proofH.removeVouch(requester, { from: voucher1 }),
+      'No vouch to remove'
+    )
+
     isVouched = await proofH.vouches(voucher1, requester)
     assert.equal(isVouched, false, 'The vouch should be removed')
 
@@ -679,12 +697,6 @@ contract('ProofOfHumanity', function(accounts) {
       proofH.changeStateToPending(requester, [voucher1], { from: governor }),
       'Not enough valid vouches'
     )
-    // Voucher who is not registered.
-    await proofH.addVouch(requester, { from: other })
-    await expectRevert(
-      proofH.changeStateToPending(requester, [other], { from: governor }),
-      'Not enough valid vouches'
-    )
     // Voucher who already vouched for a different submission.
     await proofH.addSubmission('evidence1', {
       from: requester2,
@@ -703,11 +715,9 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeSubmissionDuration(10, { from: governor })
     await time.increase(10)
 
-    await proofH.addVouch(requester, { from: voucher1 })
-
     await expectRevert(
-      proofH.changeStateToPending(requester, [voucher1], { from: governor }),
-      'Not enough valid vouches.'
+      proofH.addVouch(requester, { from: voucher1 }),
+      'No right to vouch'
     )
 
     // Change the submission time and nbVouches back to do another checks.
@@ -715,6 +725,7 @@ contract('ProofOfHumanity', function(accounts) {
       from: governor
     })
     await proofH.changeRequiredNumberOfVouches(nbVouches, { from: governor })
+    await proofH.addVouch(requester, { from: voucher1 })
 
     // Check that the voucher can't be duplicated.
     await expectRevert(
