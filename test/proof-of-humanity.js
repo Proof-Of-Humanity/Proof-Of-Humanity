@@ -580,7 +580,7 @@ contract('ProofOfHumanity', function(accounts) {
 
     await expectRevert(
       proofH.addVouch(requester, { from: voucher1 }),
-      'Already vouched for this submission'
+      'Already vouched for this'
     )
 
     let isVouched = await proofH.vouches(voucher1, requester)
