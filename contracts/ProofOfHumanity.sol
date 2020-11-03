@@ -155,14 +155,14 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _submissionID The submission that receives the vouch.
      *  @param _voucher The address that vouched.
      */
-    event VouchAdded(address indexed _submissionID, address _voucher);
+    event VouchAdded(address indexed _submissionID, address indexed _voucher);
 
     /**
      *  @dev Emitted when a vouch is removed.
      *  @param _submissionID The submission which vouch is removed.
      *  @param _voucher The address that removes its vouch.
      */
-    event VouchRemoved(address indexed _submissionID, address _voucher);
+    event VouchRemoved(address indexed _submissionID, address indexed _voucher);
 
     /** @dev Emitted when the reapplication request is made.
      *  @param _submissionID The ID of the submission.
@@ -176,6 +176,14 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _challengeID The ID of the challenge.
      */
     event SubmissionChallenged(address indexed _submissionID, uint indexed _requestID, uint _challengeID);
+
+    /** @dev To be emitted when someone contributes to the appeal process.
+     *  @param _submissionID The ID of the submission.
+     *  @param _party The party which received the contribution.
+     *  @param _contributor The address of the contributor.
+     *  @param _amount The amount contributed.
+     */
+    event AppealContribution(address indexed _submissionID, Party _party, address indexed _contributor, uint _amount);
 
     /** @dev Emitted when one of the parties successfully paid its appeal fees.
      *  @param _submissionID The ID of the submission.
@@ -442,7 +450,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function addVouch(address _submissionID) external {
         Submission storage submission = submissions[_submissionID];
+        Submission storage voucher = submissions[msg.sender];
         require(submission.status == Status.Vouching, "Wrong status");
+        require(voucher.registered && now - voucher.submissionTime <= submissionDuration, "No right to vouch");
+        require(!vouches[msg.sender][_submissionID], "Already vouched for this submission");
         require(_submissionID != msg.sender, "Can't vouch for yourself");
         vouches[msg.sender][_submissionID] = true;
         emit VouchAdded(_submissionID, msg.sender);
@@ -454,6 +465,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function removeVouch(address _submissionID) external {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Wrong status");
+        require(vouches[msg.sender][_submissionID], "No vouch to remove");
         vouches[msg.sender][_submissionID] = false;
         emit VouchRemoved(_submissionID, msg.sender);
     }
@@ -486,8 +498,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
             Submission storage voucher = submissions[_vouches[i]];
-            if (!voucher.hasVouched && voucher.registered && now - voucher.submissionTime <= submissionDuration &&
-            vouches[_vouches[i]][_submissionID] == true) {
+            if (!voucher.hasVouched && vouches[_vouches[i]][_submissionID] == true) {
                 request.vouches.push(_vouches[i]);
                 voucher.hasVouched = true;
             }
@@ -590,28 +601,24 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         (uint appealPeriodStart, uint appealPeriodEnd) = arbitratorData.arbitrator.appealPeriod(challenge.disputeID);
         require(now >= appealPeriodStart && now < appealPeriodEnd, "Appeal period is over");
 
+        Party winner = Party(arbitratorData.arbitrator.currentRuling(challenge.disputeID));
         uint multiplier;
 
-        Party winner = Party(arbitratorData.arbitrator.currentRuling(challenge.disputeID));
-        Party loser;
-        if (winner == Party.Requester)
-            loser = Party.Challenger;
-        else if (winner == Party.Challenger)
-            loser = Party.Requester;
-        require(_side!=loser || (now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2), "Appeal period is over for loser");
-
-        if (_side == winner)
+        if (winner == _side){
             multiplier = winnerStakeMultiplier;
-        else if (_side == loser)
-            multiplier = loserStakeMultiplier;
-        else
+        } else if (winner == Party.None){
             multiplier = sharedStakeMultiplier;
+        } else {
+            multiplier = loserStakeMultiplier;
+            require(now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2, "Appeal period is over for loser");
+        }
 
         Round storage round = challenge.rounds[challenge.rounds.length - 1];
 
         uint appealCost = arbitratorData.arbitrator.appealCost(challenge.disputeID, arbitratorData.arbitratorExtraData);
         uint totalCost = appealCost.addCap((appealCost.mulCap(multiplier)) / MULTIPLIER_DIVISOR);
-        contribute(round, _side, msg.sender, msg.value, totalCost);
+        uint contribution = contribute(round, _side, msg.sender, msg.value, totalCost);
+        emit AppealContribution(_submissionID, _side, msg.sender, contribution);
 
         if (round.paidFees[uint(_side)] >= totalCost) {
             round.hasPaid[uint(_side)] = true;
@@ -665,11 +672,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         uint endIndex = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
             request.vouches.length : _iterations.addCap(request.penaltyIndex);
 
+        // If the ultimate challenger is defined that means that the request was ruled in favor of the challenger.
         bool applyPenalty = request.ultimateChallenger != address(0x0) && (request.currentReason == Reason.Duplicate || request.currentReason == Reason.DoesNotExist);
         for (uint i = request.penaltyIndex; i < endIndex; i++) {
             Submission storage voucher = submissions[request.vouches[i]];
             voucher.hasVouched = false;
-            // If the ultimate challenger is defined that means that the request was ruled in favor of the challenger.
             if (applyPenalty) {
                 // Check the situation when vouching address is in the middle of reapplication process.
                 if (voucher.status == Status.Vouching || voucher.status == Status.PendingRegistration)
