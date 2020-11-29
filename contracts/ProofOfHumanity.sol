@@ -122,10 +122,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /* Storage */
 
-    IArbitrator public arbitrator; // The arbitrator contract.
-    uint96 public metaEvidenceUpdates; // The number of times the meta evidence has been updated. Used to track the latest meta evidence ID.
-    bytes public arbitratorExtraData; // Extra data to require particular dispute and appeal behaviour.
-
     address public governor; // The address that can make governance changes to the parameters of the contract.
 
     uint128 public submissionBaseDeposit; // The base deposit to make a new request for a submission.
@@ -184,7 +180,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _contributor The address of the contributor.
      *  @param _amount The amount contributed.
      */
-    event AppealContribution(address indexed _submissionID, uint indexed _challengeID, Party _party, address _contributor, uint _amount);
+    event AppealContribution(address indexed _submissionID, uint indexed _challengeID, Party _party, address indexed _contributor, uint _amount);
 
     /** @dev Emitted when one of the parties successfully paid its appeal fees.
      *  @param _submissionID The ID of the submission.
@@ -231,8 +227,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         emit MetaEvidence(0, _registrationMetaEvidence);
         emit MetaEvidence(1, _clearingMetaEvidence);
 
-        arbitrator = _arbitrator;
-        arbitratorExtraData = _arbitratorExtraData;
         governor = msg.sender;
         submissionBaseDeposit = _submissionBaseDeposit;
         submissionDuration = _submissionDuration;
@@ -273,7 +267,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.resolved = true;
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
+            emit Evidence(arbitratorDataList[arbitratorDataList.length - 1].arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
     }
 
     /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
@@ -364,15 +358,15 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function changeMetaEvidence(string calldata _registrationMetaEvidence, string calldata _clearingMetaEvidence) external {
         require(isGovernor(msg.sender), "The caller must be the governor.");
-        metaEvidenceUpdates++;
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length - 1];
+        uint96 newMetaEvidenceID = arbitratorData.metaEvidenceID + 1;
         arbitratorDataList.push(ArbitratorData({
             arbitrator: arbitratorData.arbitrator,
-            metaEvidenceID: metaEvidenceUpdates,
+            metaEvidenceID: newMetaEvidenceID,
             arbitratorExtraData: arbitratorData.arbitratorExtraData
         }));
-        emit MetaEvidence(2 * metaEvidenceUpdates, _registrationMetaEvidence);
-        emit MetaEvidence(2 * metaEvidenceUpdates + 1, _clearingMetaEvidence);
+        emit MetaEvidence(2 * newMetaEvidenceID, _registrationMetaEvidence);
+        emit MetaEvidence(2 * newMetaEvidenceID + 1, _clearingMetaEvidence);
     }
 
     /** @dev Change the arbitrator to be used for disputes that may be raised in the next requests. The arbitrator is trusted to support appeal periods and not reenter.
@@ -381,8 +375,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function changeArbitrator(IArbitrator _arbitrator, bytes calldata _arbitratorExtraData) external {
         require(isGovernor(msg.sender), "The caller must be the governor.");
-        arbitrator = _arbitrator;
-        arbitratorExtraData = _arbitratorExtraData;
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length - 1];
         arbitratorDataList.push(ArbitratorData({
             arbitrator: _arbitrator,
@@ -612,17 +604,20 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         (uint appealPeriodStart, uint appealPeriodEnd) = arbitratorData.arbitrator.appealPeriod(challenge.disputeID);
         require(now >= appealPeriodStart && now < appealPeriodEnd, "Appeal period is over");
 
-        Party winner = Party(arbitratorData.arbitrator.currentRuling(challenge.disputeID));
         uint multiplier;
-
-        if (winner == _side){
-            multiplier = winnerStakeMultiplier;
-        } else if (winner == Party.None){
-            multiplier = sharedStakeMultiplier;
-        } else {
-            multiplier = loserStakeMultiplier;
-            require(now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2, "Appeal period is over for loser");
+        /* solium-disable indentation */
+        {
+            Party winner = Party(arbitratorData.arbitrator.currentRuling(challenge.disputeID));
+            if (winner == _side){
+                multiplier = winnerStakeMultiplier;
+            } else if (winner == Party.None){
+                multiplier = sharedStakeMultiplier;
+            } else {
+                multiplier = loserStakeMultiplier;
+                require(now-appealPeriodStart < (appealPeriodEnd-appealPeriodStart)/2, "Appeal period is over for loser");
+            }
         }
+        /* solium-enable indentation */
 
         Round storage round = challenge.rounds[challenge.rounds.length - 1];
 
@@ -800,7 +795,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         Challenge storage challenge = request.challenges[request.challenges.length++];
         Round storage round = challenge.rounds[challenge.rounds.length++];
-        uint arbitrationCost = arbitrator.arbitrationCost(arbitratorExtraData);
+
+        IArbitrator _arbitrator = arbitratorDataList[arbitratorDataList.length - 1].arbitrator;
+        uint arbitrationCost = _arbitrator.arbitrationCost(arbitratorDataList[arbitratorDataList.length - 1].arbitratorExtraData);
         uint totalCost = arbitrationCost.addCap((arbitrationCost.mulCap(sharedStakeMultiplier)) / MULTIPLIER_DIVISOR).addCap(submissionBaseDeposit);
         contribute(round, Party.Requester, msg.sender, msg.value, totalCost);
 
@@ -811,7 +808,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.hasPaid[uint(Party.Requester)] = true;
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
+            emit Evidence(_arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
     }
 
     /** @dev Returns the contribution value and remainder from available ETH and required amount.

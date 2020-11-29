@@ -83,8 +83,6 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should set the correct values in constructor', async () => {
-    assert.equal(await proofH.arbitrator(), arbitrator.address)
-    assert.equal(await proofH.arbitratorExtraData(), arbitratorExtraData)
     assert.equal(await proofH.governor(), governor)
     assert.equal(await proofH.submissionBaseDeposit(), submissionBaseDeposit)
     assert.equal(await proofH.submissionDuration(), submissionDuration)
@@ -2437,10 +2435,16 @@ contract('ProofOfHumanity', function(accounts) {
       'The caller must be the governor.' // Check that the old governor can't change variables anymore.
     )
     await proofH.changeMetaEvidence('1', '2', { from: other })
+    let arbitratorData = await proofH.arbitratorDataList(1)
     assert.equal(
-      (await proofH.metaEvidenceUpdates()).toNumber(),
+      arbitratorData[1].toNumber(),
       1,
       'Incorrect metaEvidenceUpdates value'
+    )
+    assert.equal(
+      (await proofH.getArbitratorDataListCount()).toNumber(),
+      2,
+      'Incorrect arbitratorData length'
     )
     // arbitrator
     await expectRevert(
@@ -2448,15 +2452,13 @@ contract('ProofOfHumanity', function(accounts) {
       'The caller must be the governor.'
     )
     await proofH.changeArbitrator(governor, '0xff', { from: other })
+    arbitratorData = await proofH.arbitratorDataList(2)
+    assert.equal(arbitratorData[0], governor, 'Incorrect arbitrator address')
+    assert.equal(arbitratorData[2], '0xff', 'Incorrect extradata')
     assert.equal(
-      await proofH.arbitrator(),
-      governor,
-      'Incorrect arbitrator address'
-    )
-    assert.equal(
-      await proofH.arbitratorExtraData(),
-      '0xff',
-      'Incorrect extraData value'
+      (await proofH.getArbitratorDataListCount()).toNumber(),
+      3,
+      'Incorrect arbitratorData length'
     )
   })
 
