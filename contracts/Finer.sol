@@ -23,7 +23,7 @@ contract Finer {
     IArbitrator public arbitrator; // The arbitrator contract.
 
     /**
-     *  @dev Emitted when a vouch is added.
+     *  @dev Emitted when a fine is paid.
      *  @param _challenger The address of the challenger to pay the fines to.
      *  @param _voucher The address of the penalized voucher that pays the fine.
      *  @param _disputeID The ID of the related dispute that was ruled in favor of the challenger.

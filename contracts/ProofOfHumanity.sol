@@ -77,12 +77,12 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         bool requesterLost; // True if the requester has already had a dispute that wasn't ruled in his favor.
         Reason currentReason; // Current reason a registration request was challenged with. Is left empty for removal requests.
         uint16 nbParallelDisputes; // Tracks the number of simultaneously raised disputes. Parallel disputes are only allowed for reason Duplicate.
-        uint32 penaltyIndex; // Stores the index of the last processed vouch in the array of vouches. Is used for partial processing of the vouches in resolved submissions.
+        uint32 lastProcessedVouch; // Stores the index of the last processed vouch in the array of vouches. Is used for partial processing of the vouches in resolved submissions.
         uint64 currentDuplicateIndex; // Stores the array index of the duplicate submission provided by the challenger who is currently winning.
         uint32 arbitratorDataID; // The index of the relevant arbitratorData struct. All the arbitrator info is stored in a separate struct to reduce gas cost.
         uint64 lastStatusChange; // Time when submission's status was last updated. Is used to track when the challenge period ends.
         address payable requester; // Address that made a request. It matches submissionID in case of registration requests.
-        address payable ultimateChallenger; // Address of the challenger who won a dispute and who users, that vouched for the request, must pay the fines to.
+        address payable ultimateChallenger; // Address of the challenger who won a dispute and who users that vouched for the request must pay the fines to.
         uint usedReasons; // Bitmap of the reasons used by challengers of this request.
         address[] vouches; // Stores the addresses of all submissions that vouched for this request.
         Challenge[] challenges; // Stores all the challenges of this request.
@@ -116,7 +116,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     struct ArbitratorData {
         IArbitrator arbitrator; // Address of the trusted arbitrator to solve disputes.
-        uint96 metaEvidenceID; // The meta evidence to be used in disputes.
+        uint96 metaEvidenceUpdates; // The meta evidence to be used in disputes.
         bytes arbitratorExtraData; // Extra data for the arbitrator.
     }
 
@@ -267,7 +267,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.resolved = true;
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(arbitratorDataList[arbitratorDataList.length - 1].arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
+            emit Evidence(arbitratorDataList[arbitratorDataList.length - 1].arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
     /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
@@ -289,6 +289,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Change the time after which the registered status of a submission expires.
+     *  Note that in order to avoid unexpected behaviour the new value must fulfill: submissionDuration > challengePeriodDuration + renewalPeriodDuration.
      *  @param _submissionDuration The new duration of the time the submission is considered registered.
      */
     function changeSubmissionDuration(uint64 _submissionDuration) external {
@@ -297,6 +298,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Change the time during which reapplication becomes possible.
+     *  Note that in order to avoid unexpected behaviour the new value must fulfill: submissionDuration > challengePeriodDuration + renewalPeriodDuration.
      *  @param _renewalPeriodDuration The new value that defines the duration of submission's renewal period.
      */
     function changeRenewalPeriodDuration(uint64 _renewalPeriodDuration) external {
@@ -305,6 +307,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Change the duration of the challenge period.
+     *  Note that in order to avoid unexpected behaviour the new value must fulfill: submissionDuration > challengePeriodDuration + renewalPeriodDuration.
      *  @param _challengePeriodDuration The new duration of the challenge period.
      */
     function changeChallengePeriodDuration(uint64 _challengePeriodDuration) external {
@@ -359,14 +362,14 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function changeMetaEvidence(string calldata _registrationMetaEvidence, string calldata _clearingMetaEvidence) external {
         require(isGovernor(msg.sender), "The caller must be the governor.");
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length - 1];
-        uint96 newMetaEvidenceID = arbitratorData.metaEvidenceID + 1;
+        uint96 newMetaEvidenceUpdates = arbitratorData.metaEvidenceUpdates + 1;
         arbitratorDataList.push(ArbitratorData({
             arbitrator: arbitratorData.arbitrator,
-            metaEvidenceID: newMetaEvidenceID,
+            metaEvidenceUpdates: newMetaEvidenceUpdates,
             arbitratorExtraData: arbitratorData.arbitratorExtraData
         }));
-        emit MetaEvidence(2 * newMetaEvidenceID, _registrationMetaEvidence);
-        emit MetaEvidence(2 * newMetaEvidenceID + 1, _clearingMetaEvidence);
+        emit MetaEvidence(2 * newMetaEvidenceUpdates, _registrationMetaEvidence);
+        emit MetaEvidence(2 * newMetaEvidenceUpdates + 1, _clearingMetaEvidence);
     }
 
     /** @dev Change the arbitrator to be used for disputes that may be raised in the next requests. The arbitrator is trusted to support appeal periods and not reenter.
@@ -378,7 +381,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length - 1];
         arbitratorDataList.push(ArbitratorData({
             arbitrator: _arbitrator,
-            metaEvidenceID: arbitratorData.metaEvidenceID,
+            metaEvidenceUpdates: arbitratorData.metaEvidenceUpdates,
             arbitratorExtraData: _arbitratorExtraData
         }));
     }
@@ -436,11 +439,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[submission.requests.length - 1];
         Challenge storage challenge = request.challenges[request.challenges.length - 1];
         Round storage round = challenge.rounds[challenge.rounds.length - 1];
-        require(!round.hasPaid[uint(Party.Requester)], "Fee is already paid");
 
         ArbitratorData storage arbitratorData = arbitratorDataList[request.arbitratorDataID];
         uint arbitrationCost = arbitratorData.arbitrator.arbitrationCost(arbitratorData.arbitratorExtraData);
-        uint totalCost = arbitrationCost.addCap((arbitrationCost.mulCap(sharedStakeMultiplier)) / MULTIPLIER_DIVISOR).addCap(submissionBaseDeposit);
+        uint totalCost = arbitrationCost.addCap(submissionBaseDeposit);
         contribute(round, Party.Requester, msg.sender, msg.value, totalCost);
 
         if (round.paidFees[uint(Party.Requester)] >= totalCost)
@@ -495,7 +497,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[submission.requests.length - 1];
         Challenge storage challenge = request.challenges[request.challenges.length - 1];
         Round storage round = challenge.rounds[challenge.rounds.length - 1];
-        require(round.hasPaid[uint(Party.Requester)], "Requester didn't pay his fees");
+        require(round.hasPaid[uint(Party.Requester)], "Requester is not funded");
 
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
@@ -578,12 +580,12 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         emit Dispute(
             arbitratorData.arbitrator,
             challenge.disputeID,
-            submission.status == Status.PendingRegistration ? 2 * arbitratorData.metaEvidenceID : 2 * arbitratorData.metaEvidenceID + 1,
-            ((submission.requests.length - 1) << 160) + uint(_submissionID)
+            submission.status == Status.PendingRegistration ? 2 * arbitratorData.metaEvidenceUpdates : 2 * arbitratorData.metaEvidenceUpdates + 1,
+            submission.requests.length - 1 + uint(_submissionID)
         );
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(arbitratorData.arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
+            emit Evidence(arbitratorData.arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
     /** @dev Takes up to the total amount required to fund a side of an appeal. Reimburses the rest. Creates an appeal if both sides are fully funded.
@@ -675,12 +677,12 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[_requestID];
         require(request.resolved, "Submission must be resolved");
 
-        uint endIndex = _iterations.addCap(request.penaltyIndex) > request.vouches.length ?
-            request.vouches.length : _iterations.addCap(request.penaltyIndex);
+        uint endIndex = _iterations.addCap(request.lastProcessedVouch) > request.vouches.length ?
+            request.vouches.length : _iterations.addCap(request.lastProcessedVouch);
 
         // If the ultimate challenger is defined that means that the request was ruled in favor of the challenger.
         bool applyPenalty = request.ultimateChallenger != address(0x0) && (request.currentReason == Reason.Duplicate || request.currentReason == Reason.DoesNotExist);
-        for (uint i = request.penaltyIndex; i < endIndex; i++) {
+        for (uint i = request.lastProcessedVouch; i < endIndex; i++) {
             Submission storage voucher = submissions[request.vouches[i]];
             voucher.hasVouched = false;
             if (applyPenalty) {
@@ -691,7 +693,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                 voucher.registered = false;
             }
         }
-        request.penaltyIndex = uint32(endIndex);
+        request.lastProcessedVouch = uint32(endIndex);
     }
 
     /** @dev Reimburses contributions if no disputes were raised. If a dispute was raised, sends the fee stake rewards and reimbursements proportionally to the contributions made to the winner of a dispute.
@@ -738,7 +740,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Give a ruling for a dispute. Can only be called by the arbitrator. TRUSTED.
-     *  Account for the situation where the winner loses a case due to paying less appeal fees than expected.
+     *  Accounts for the situation where the winner loses a case due to paying less appeal fees than expected.
      *  @param _disputeID ID of the dispute in the arbitrator contract.
      *  @param _ruling Ruling given by the arbitrator. Note that 0 is reserved for "Refused to arbitrate".
      */
@@ -776,12 +778,13 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         ArbitratorData storage arbitratorData = arbitratorDataList[request.arbitratorDataID];
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(arbitratorData.arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
+            emit Evidence(arbitratorData.arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
     /* Internal */
 
     /** @dev Make a request to change submission's status. Paying the full deposit right away is not required for registration requests.
+     *  Note that removal requests require the full deposit and can't be crowdfunded.
      *  @param _submissionID The address of the submission which status to change.
      *  @param _evidence A link to evidence using its URI.
      */
@@ -798,7 +801,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         IArbitrator _arbitrator = arbitratorDataList[arbitratorDataList.length - 1].arbitrator;
         uint arbitrationCost = _arbitrator.arbitrationCost(arbitratorDataList[arbitratorDataList.length - 1].arbitratorExtraData);
-        uint totalCost = arbitrationCost.addCap((arbitrationCost.mulCap(sharedStakeMultiplier)) / MULTIPLIER_DIVISOR).addCap(submissionBaseDeposit);
+        uint totalCost = arbitrationCost.addCap(submissionBaseDeposit);
         contribute(round, Party.Requester, msg.sender, msg.value, totalCost);
 
         if (submission.status == Status.PendingRemoval)
@@ -808,7 +811,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.hasPaid[uint(Party.Requester)] = true;
 
         if (bytes(_evidence).length > 0)
-            emit Evidence(_arbitrator, ((submission.requests.length - 1) << 160) + uint(_submissionID), msg.sender, _evidence);
+            emit Evidence(_arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
     /** @dev Returns the contribution value and remainder from available ETH and required amount.
@@ -861,7 +864,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Challenge storage challenge = request.challenges[_challengeID];
 
         if (submission.status == Status.PendingRemoval) {
-            submission.registered = _winner == Party.Requester ? false : true;
+            submission.registered = _winner != Party.Requester;
             submission.status = Status.None;
             request.resolved = true;
         } else if (submission.status == Status.PendingRegistration) {

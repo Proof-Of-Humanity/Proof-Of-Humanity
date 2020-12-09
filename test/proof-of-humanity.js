@@ -76,10 +76,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addSubmissionManually(voucher2, '', { from: governor })
     await proofH.addSubmissionManually(voucher3, '', { from: governor })
 
-    requesterTotalCost =
-      arbitrationCost +
-      (arbitrationCost * sharedStakeMultiplier) / MULTIPLIER_DIVISOR +
-      submissionBaseDeposit // Total sum: 1000 + 500 + 5000 = 6500
+    requesterTotalCost = arbitrationCost + submissionBaseDeposit // Total sum: 1000 + 5000 = 6000
   })
 
   it('Should set the correct values in constructor', async () => {
@@ -233,7 +230,7 @@ contract('ProofOfHumanity', function(accounts) {
     const round = await proofH.getRoundInfo(requester, 0, 0, 0)
     assert.equal(
       round[1][1].toNumber(),
-      6500,
+      6000,
       'Requester paidFees has not been registered correctly'
     )
     assert.equal(
@@ -243,7 +240,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
     assert.equal(
       round[3].toNumber(),
-      6500,
+      6000,
       'FeeRewards has not been registered correctly'
     )
 
@@ -256,7 +253,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
     assert.equal(
       contribution[1].toNumber(),
-      6500,
+      6000,
       'Requester contribution has not been registered correctly'
     )
 
@@ -422,14 +419,10 @@ contract('ProofOfHumanity', function(accounts) {
     contribution = await proofH.getContributions(requester, 0, 0, 0, other)
     assert.equal(
       contribution[1].toNumber(),
-      1000,
+      500,
       'Second crowdfunder contribution has not been registered correctly'
     )
 
-    await expectRevert(
-      proofH.fundSubmission(requester, { from: voucher2 }),
-      'Fee is already paid'
-    )
     // Check that already registered or absent submission can't be funded.
     await expectRevert(
       proofH.fundSubmission(voucher1, { from: voucher1 }),
@@ -639,7 +632,7 @@ contract('ProofOfHumanity', function(accounts) {
       proofH.changeStateToPending(requester, [voucher1, voucher2], {
         from: governor
       }),
-      "Requester didn't pay his fees"
+      'Requester is not funded'
     )
 
     await proofH.fundSubmission(requester, {
@@ -936,7 +929,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
     assert.equal(
       round[3].toNumber(),
-      6500, // It should stay the same because the value of the deposit get subtracted when the dispute is created.
+      6000, // It should stay the same because the value of the deposit get subtracted when the dispute is created.
       'Incorrect feeRewards value after challenge'
     )
 
@@ -1188,7 +1181,7 @@ contract('ProofOfHumanity', function(accounts) {
     let round = await proofH.getRoundInfo(requester, 0, 0, 0)
     assert.equal(
       round[3].toNumber(),
-      6500,
+      6000,
       'Incorrect feeRewards value for the first challenge'
     )
     round = await proofH.getRoundInfo(requester, 0, 1, 0)
@@ -2235,7 +2228,7 @@ contract('ProofOfHumanity', function(accounts) {
     let newBalanceRequester = await web3.eth.getBalance(requester)
     assert(
       new BN(newBalanceRequester).eq(
-        new BN(oldBalanceRequester).add(new BN(1300)) // The requester only did a partial funding so he should be reimbursed according to that (0.2 * feeRewards).
+        new BN(oldBalanceRequester).add(new BN(1200)) // The requester only did a partial funding so he should be reimbursed according to that (0.2 * feeRewards).
       ),
       'The balance of the requester is incorrect after withdrawing from 0 challenge'
     )
@@ -2246,7 +2239,7 @@ contract('ProofOfHumanity', function(accounts) {
     const newBalanceCrowdfunder = await web3.eth.getBalance(other)
     assert(
       new BN(newBalanceCrowdfunder).eq(
-        new BN(oldBalanceCrowdfunder).add(new BN(5200)) // 0.8 * feeRewards.
+        new BN(oldBalanceCrowdfunder).add(new BN(4800)) // 0.8 * feeRewards.
       ),
       'The balance of the crowdfunder is incorrect'
     )
@@ -2296,7 +2289,7 @@ contract('ProofOfHumanity', function(accounts) {
     let newBalanceRequester = await web3.eth.getBalance(requester)
     assert(
       new BN(newBalanceRequester).eq(
-        new BN(oldBalanceRequester).add(new BN(5633)) // 6500/7500 * 6500 = 5633.3
+        new BN(oldBalanceRequester).add(new BN(5142)) // 6000/7000 * 6000 = 5142.8
       ),
       'The balance of the requester is incorrect after withdrawing from 0 challenge'
     )
@@ -2308,7 +2301,7 @@ contract('ProofOfHumanity', function(accounts) {
     const newBalanceChallenger = await web3.eth.getBalance(challenger1)
     assert(
       new BN(newBalanceChallenger).eq(
-        new BN(oldBalanceChallenger).add(new BN(866)) // 1000/7500 * 6500 = 866.6
+        new BN(oldBalanceChallenger).add(new BN(857)) // 1000/7000 * 6000 = 857.1
       ),
       'The balance of the challenger is incorrect after withdrawing from 0 challenge'
     )
