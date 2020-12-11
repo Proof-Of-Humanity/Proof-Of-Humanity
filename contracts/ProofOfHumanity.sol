@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1]
- *  @reviewers: [@fnanni-0*]
+ *  @reviewers: [@fnanni-0*, @nix1g]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -256,8 +256,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         require(isGovernor(msg.sender), "The caller must be the governor.");
         Submission storage submission = submissions[_submissionID];
         require(submission.requests.length == 0, "Submission already been created");
+        submission.index = uint64(submissionList.length);
         submissionList.push(_submissionID);
-        submission.index = uint64(submissionList.length - 1);
 
         Request storage request = submission.requests[submission.requests.length++];
         submission.registered = true;
