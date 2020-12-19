@@ -275,13 +275,12 @@ contract('ProofOfHumanity', function(accounts) {
       arbitrator.address,
       'The event has wrong arbitrator address'
     )
-    /* TODO
+    const evidenceGroupID = parseInt(requester, 16)
     assert.equal(
       txAddSubmission.logs[0].args._evidenceGroupID,
       evidenceGroupID,
       'The event has wrong evidence group ID'
     )
-    */
     assert.equal(
       txAddSubmission.logs[0].args._party,
       requester,
@@ -969,13 +968,12 @@ contract('ProofOfHumanity', function(accounts) {
       0,
       'The Dispute event has wrong metaevidence ID'
     )
-    /* TODO
+    const evidenceGroupID = parseInt(requester, 16)
     assert.equal(
       txChallenge.logs[1].args._evidenceGroupID,
       evidenceGroupID,
       'The Dispute event has wrong evidence group ID'
     )
-    */
     assert.equal(
       txChallenge.logs[2].event,
       'Evidence',
@@ -986,13 +984,11 @@ contract('ProofOfHumanity', function(accounts) {
       arbitrator.address,
       'The Evidence event has wrong arbitrator address'
     )
-    /* TODO
     assert.equal(
       txChallenge.logs[2].args._evidenceGroupID,
       evidenceGroupID,
       'The Evidence event has wrong evidence group ID'
     )
-    */
     assert.equal(
       txChallenge.logs[2].args._party,
       challenger1,
@@ -2505,6 +2501,16 @@ contract('ProofOfHumanity', function(accounts) {
     await expectRevert(
       proofH.withdrawSubmission({ from: requester }),
       'Wrong status'
+    )
+  })
+
+  it('Submission should not be registered after expiration', async () => {
+    await time.increase(submissionDuration + 1)
+    const submission = await proofH.getSubmissionInfo(voucher1)
+    assert.equal(
+      submission[4],
+      false,
+      'The submission should not be registered'
     )
   })
 })
