@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1]
- *  @reviewers: [@fnanni-0*,@mtsalenc,@nix1g]
+ *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -63,7 +63,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     struct Submission {
         Status status; // The current status of the submission.
-        bool registered; // Whether the submission is in the registry or not.
+        bool registered; // Whether the submission is in the registry or not. Note that a registered submission won't have privileges (e.g. vouching) if its duration expired.
         bool hasVouched; // True if this submission used its vouch for another submission.
         uint64 submissionTime; // The time when the submission was accepted to the list.
         uint64 renewalTimestamp; // The time after which it becomes possible to reapply the submission.
@@ -990,7 +990,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             submission.submissionTime,
             submission.renewalTimestamp,
             submission.index,
-            submission.registered,
+            submission.registered && now - submission.submissionTime <= submissionDuration,
             submission.hasVouched,
             submission.requests.length
         );
