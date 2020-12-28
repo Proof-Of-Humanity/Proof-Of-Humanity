@@ -437,8 +437,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Wrong status");
         Request storage request = submission.requests[submission.requests.length - 1];
-        Challenge storage challenge = request.challenges[request.challenges.length - 1];
-        Round storage round = challenge.rounds[challenge.rounds.length - 1];
+        Challenge storage challenge = request.challenges[0];
+        Round storage round = challenge.rounds[0];
 
         ArbitratorData storage arbitratorData = arbitratorDataList[request.arbitratorDataID];
         uint arbitrationCost = arbitratorData.arbitrator.arbitrationCost(arbitratorData.arbitratorExtraData);
@@ -495,8 +495,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Wrong status");
         Request storage request = submission.requests[submission.requests.length - 1];
-        Challenge storage challenge = request.challenges[request.challenges.length - 1];
-        Round storage round = challenge.rounds[challenge.rounds.length - 1];
+        Challenge storage challenge = request.challenges[0];
+        Round storage round = challenge.rounds[0];
         require(round.hasPaid[uint(Party.Requester)], "Requester is not funded");
 
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
