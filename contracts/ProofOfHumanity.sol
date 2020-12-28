@@ -1,10 +1,10 @@
 /**
  *  @authors: [@unknownunknown1]
- *  @reviewers: [@fnanni-0, @mtsalenc*, @nix1g*]
+ *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
- *  @tools: [MythX]
+ *  @tools: [MythX*]
  */
 
 pragma solidity ^0.5.13;
