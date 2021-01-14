@@ -108,7 +108,7 @@ contract('ProofOfHumanity', function(accounts) {
       'First submission has incorrect status'
     )
     assert.equal(
-      submission1[6].toNumber(),
+      submission1[5].toNumber(),
       1,
       'First submission has incorrect number of requests'
     )
@@ -124,11 +124,11 @@ contract('ProofOfHumanity', function(accounts) {
       'The request of the first submission has incorrect arbitrator data ID'
     )
     assert.equal(
-      submission1[3].toNumber(),
+      submission1[2].toNumber(),
       0,
       'Incorrect index of the first submission'
     )
-    assert.equal(submission1[4], true, 'First submission should be registered')
+    assert.equal(submission1[3], true, 'First submission should be registered')
 
     // Check the data of the 2nd submission as well.
     let submission2 = await proofH.getSubmissionInfo(voucher2)
@@ -138,7 +138,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Second submission has incorrect status'
     )
     assert.equal(
-      submission2[6].toNumber(),
+      submission2[5].toNumber(),
       1,
       'Second submission has incorrect number of requests'
     )
@@ -155,15 +155,15 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     assert.equal(
-      submission2[3].toNumber(),
+      submission2[2].toNumber(),
       1,
       'Incorrect index of the second submission'
     )
-    assert.equal(submission2[4], true, 'Second submission should be registered')
+    assert.equal(submission2[3], true, 'Second submission should be registered')
 
     // There is no point in checking the data of the 3rd submission in detail.
     assert.equal(
-      (await proofH.submissionCount()).toNumber(),
+      (await proofH.submissionCounter()).toNumber(),
       3,
       'Incorrect submission count after manual registration'
     )
@@ -171,7 +171,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.removeSubmissionManually(voucher2, { from: governor })
     submission2 = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      submission2[4],
+      submission2[3],
       false,
       'Second submission should not be registered after manual removal'
     )
@@ -197,12 +197,12 @@ contract('ProofOfHumanity', function(accounts) {
     const submission = await proofH.getSubmissionInfo(requester)
     assert.equal(submission[0].toNumber(), 1, 'Submission has incorrect status')
     assert.equal(
-      submission[6].toNumber(),
+      submission[5].toNumber(),
       1,
       'Submission has incorrect number of requests'
     )
     assert.equal(
-      submission[4],
+      submission[3],
       false,
       'Submission should not be registered yet'
     )
@@ -213,7 +213,11 @@ contract('ProofOfHumanity', function(accounts) {
       1,
       'Arbitrator data ID was not set up properly'
     )
-    assert.equal(request[7], requester, 'Requester was not set up properly')
+    assert.equal(
+      request[7],
+      '0x0000000000000000000000000000000000000000',
+      'Requester should be empty for registration requests'
+    )
 
     const arbitratorData = await proofH.arbitratorDataList(1)
     assert.equal(
@@ -450,11 +454,11 @@ contract('ProofOfHumanity', function(accounts) {
     const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(submission[0].toNumber(), 3, 'Submission has incorrect status')
     assert.equal(
-      submission[6].toNumber(),
+      submission[5].toNumber(),
       2,
       'Submission has incorrect number of requests'
     )
-    assert.equal(submission[4], true, 'Submission should still be registered')
+    assert.equal(submission[3], true, 'Submission should still be registered')
 
     const round = await proofH.getRoundInfo(voucher1, 1, 0, 0)
     assert.equal(
@@ -527,19 +531,14 @@ contract('ProofOfHumanity', function(accounts) {
 
     await proofH.reapplySubmission('.json', { from: voucher1 })
 
-    await expectRevert(
-      proofH.addVouch(voucher1, { from: voucher1 }),
-      "Can't vouch for yourself"
-    )
-
     const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(submission[0].toNumber(), 1, 'Submission has incorrect status')
     assert.equal(
-      submission[6].toNumber(),
+      submission[5].toNumber(),
       2,
       'Submission has incorrect number of requests'
     )
-    assert.equal(submission[4], true, 'Submission should still be registered')
+    assert.equal(submission[3], true, 'Submission should still be registered')
 
     await expectRevert(
       proofH.reapplySubmission('.json', { from: other }),
@@ -554,24 +553,9 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should correctly store vouches and change vouching state', async () => {
-    await expectRevert(
-      proofH.addVouch(requester, { from: voucher1 }),
-      'Wrong status'
-    )
-
     await proofH.addSubmission('evidence1', { from: requester })
 
-    await expectRevert(
-      proofH.addVouch(requester, { from: other }),
-      'No right to vouch'
-    )
-
     const txVouchAdd = await proofH.addVouch(requester, { from: voucher1 })
-
-    await expectRevert(
-      proofH.addVouch(requester, { from: voucher1 }),
-      'Already vouched for this'
-    )
 
     let isVouched = await proofH.vouches(voucher1, requester)
     assert.equal(
@@ -599,11 +583,6 @@ contract('ProofOfHumanity', function(accounts) {
     const txVouchRemove = await proofH.removeVouch(requester, {
       from: voucher1
     })
-
-    await expectRevert(
-      proofH.removeVouch(requester, { from: voucher1 }),
-      'No vouch to remove'
-    )
 
     isVouched = await proofH.vouches(voucher1, requester)
     assert.equal(isVouched, false, 'The vouch should be removed')
@@ -649,9 +628,9 @@ contract('ProofOfHumanity', function(accounts) {
     assert.equal(submission[0].toNumber(), 2, 'Submission has incorrect status')
 
     const voucher1Info = await proofH.getSubmissionInfo(voucher1)
-    assert.equal(voucher1Info[5], true, 'Did not register the first vouch')
+    assert.equal(voucher1Info[4], true, 'Did not register the first vouch')
     const voucher2Info = await proofH.getSubmissionInfo(voucher2)
-    assert.equal(voucher2Info[5], true, 'Did not register the second vouch')
+    assert.equal(voucher2Info[4], true, 'Did not register the second vouch')
 
     const storedVouches = (
       await proofH.getNumberOfVouches(requester, 0)
@@ -660,11 +639,6 @@ contract('ProofOfHumanity', function(accounts) {
       storedVouches,
       2,
       'Incorrect number of vouches stored in submission request'
-    )
-    // Check that the vouch can no longer be removed after the state has changed.
-    await expectRevert(
-      proofH.removeVouch(requester, { from: voucher1 }),
-      'Wrong status'
     )
   })
 
@@ -705,9 +679,10 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeSubmissionDuration(10, { from: governor })
     await time.increase(10)
 
+    await proofH.addVouch(requester, { from: voucher1 })
     await expectRevert(
-      proofH.addVouch(requester, { from: voucher1 }),
-      'No right to vouch'
+      proofH.changeStateToPending(requester, [voucher1], { from: governor }),
+      'Not enough valid vouches'
     )
 
     // Change the submission time and nbVouches back to do another checks.
@@ -715,7 +690,6 @@ contract('ProofOfHumanity', function(accounts) {
       from: governor
     })
     await proofH.changeRequiredNumberOfVouches(nbVouches, { from: governor })
-    await proofH.addVouch(requester, { from: voucher1 })
 
     // Check that the voucher can't be duplicated.
     await expectRevert(
@@ -741,18 +715,18 @@ contract('ProofOfHumanity', function(accounts) {
     )
     const voucher1Info = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      voucher1Info[5],
+      voucher1Info[4],
       true,
       'First voucher should be marked as used'
     )
     const voucher2Info = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      voucher2Info[5],
+      voucher2Info[4],
       true,
       'Second voucher should be marked as used'
     )
     const voucher3Info = await proofH.getSubmissionInfo(voucher3)
-    assert.equal(voucher3Info[5], false, 'Third voucher should not be used')
+    assert.equal(voucher3Info[4], false, 'Third voucher should not be used')
   })
 
   it('Should set correct values and create a dispute after the submission is challenged', async () => {
@@ -810,13 +784,6 @@ contract('ProofOfHumanity', function(accounts) {
         { from: challenger1, value: 1e18 }
       ),
       'Reason must be specified'
-    )
-    await expectRevert(
-      proofH.challengeRequest(requester, 2, voucher1, 'evidence2', {
-        from: challenger1,
-        value: 1e18
-      }),
-      'DuplicateID must be empty'
     )
     await expectRevert(
       proofH.challengeRequest(
@@ -882,16 +849,16 @@ contract('ProofOfHumanity', function(accounts) {
     )
     assert.equal(
       request[5].toNumber(),
-      2,
-      'The number of challenges of the request is incorrect'
+      1,
+      'The lastChallengeID of the request is incorrect'
     )
     assert.equal(request[9].toNumber(), 2, 'Incorrect reasons bitmap value')
 
     const challengeInfo = await proofH.getChallengeInfo(requester, 0, 0)
     assert.equal(
       challengeInfo[0].toNumber(),
-      2,
-      'Incorrect number of rounds after challenge'
+      1,
+      'Incorrect lastRoundID after challenge'
     )
     assert.equal(
       challengeInfo[1],
@@ -1092,8 +1059,8 @@ contract('ProofOfHumanity', function(accounts) {
     // The number of challenges is incremented for the new potential challenge.
     assert.equal(
       request[5].toNumber(),
-      3,
-      'The number of challenges of the request is incorrect'
+      2,
+      'The lastChallengeID of the request is incorrect'
     )
     assert.equal(
       request[9].toNumber(),
@@ -1104,8 +1071,8 @@ contract('ProofOfHumanity', function(accounts) {
     const challengeInfo1 = await proofH.getChallengeInfo(requester, 0, 0)
     assert.equal(
       challengeInfo1[0].toNumber(),
-      2,
-      'Incorrect number of rounds of the first challenge'
+      1,
+      'Incorrect lastRoundID of the first challenge'
     )
     assert.equal(
       challengeInfo1[1],
@@ -1141,8 +1108,8 @@ contract('ProofOfHumanity', function(accounts) {
     const challengeInfo2 = await proofH.getChallengeInfo(requester, 0, 1)
     assert.equal(
       challengeInfo2[0].toNumber(),
-      2,
-      'Incorrect number of rounds of the second challenge'
+      1,
+      'Incorrect lastRoundID of the second challenge'
     )
     assert.equal(
       challengeInfo2[1],
@@ -1222,8 +1189,8 @@ contract('ProofOfHumanity', function(accounts) {
     )
     assert.equal(
       request[5].toNumber(),
-      2,
-      'The number of challenges of the removal request is incorrect'
+      1,
+      'The lastChallengeID of the removal request is incorrect'
     )
     assert.equal(request[9].toNumber(), 0, 'The reasons bitmap should be empty')
   })
@@ -1257,7 +1224,7 @@ contract('ProofOfHumanity', function(accounts) {
       0,
       'The submission should have a default status'
     )
-    assert.equal(submission[4], true, 'The submission should be registered')
+    assert.equal(submission[3], true, 'The submission should be registered')
 
     let request = await proofH.getRequestInfo(requester, 0)
     assert.equal(request[1], true, 'The request should be resolved')
@@ -1284,6 +1251,12 @@ contract('ProofOfHumanity', function(accounts) {
       'Incorrect status.'
     )
 
+    // Check that the vouchers have been processed.
+    const voucher1Info = await proofH.getSubmissionInfo(voucher1)
+    assert.equal(voucher1Info[4], false, 'Voucher1 was not processed correctly')
+    const voucher2Info = await proofH.getSubmissionInfo(voucher2)
+    assert.equal(voucher2Info[4], false, 'Voucher2 was not processed correctly')
+
     // Also check removal request.
     await proofH.removeSubmission(requester, '', {
       from: requester2,
@@ -1299,7 +1272,7 @@ contract('ProofOfHumanity', function(accounts) {
       'The submission should have a default status after removal'
     )
     assert.equal(
-      submission[4],
+      submission[3],
       false,
       'The submission should not be registered after removal'
     )
@@ -1323,8 +1296,13 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeStateToPending(requester, [voucher1, voucher2], {
       from: governor
     })
-    await expectRevert.unspecified(
-      proofH.fundAppeal(requester, 0, 2, { from: challenger1, value: 1e18 }) // Check that can't appeal without dispute.
+
+    await expectRevert(
+      proofH.fundAppeal(requester, 0, 2, {
+        from: challenger1,
+        value: 1e18
+      }),
+      'No dispute to appeal'
     )
 
     await proofH.challengeRequest(
@@ -1347,6 +1325,14 @@ contract('ProofOfHumanity', function(accounts) {
         from: challenger1,
         value: loserAppealFee
       }) // Check that not possible to fund 0 side.
+    )
+
+    await expectRevert(
+      proofH.fundAppeal(requester, 1, 2, {
+        from: challenger1,
+        value: 1e18
+      }),
+      'Challenge out of bounds'
     )
 
     // Deliberately overpay to check that only required fee amount will be registered.
@@ -1597,7 +1583,7 @@ contract('ProofOfHumanity', function(accounts) {
       0,
       'The submission should have a default status'
     )
-    assert.equal(submission[4], true, 'The submission should be registered')
+    assert.equal(submission[3], true, 'The submission should be registered')
     request = await proofH.getRequestInfo(requester, 0)
     assert.equal(request[1], true, 'The request should be resolved')
   })
@@ -1654,14 +1640,14 @@ contract('ProofOfHumanity', function(accounts) {
     // Check that the info stored in the request is correct so far.
     let submission = await proofH.getSubmissionInfo(requester)
     assert.equal(
-      submission[4],
+      submission[3],
       false,
       'The submission should not be registered yet'
     )
 
     let request = await proofH.getRequestInfo(requester, 0)
     assert.equal(request[1], false, 'The request should not be resolved yet')
-    assert.equal(request[5].toNumber(), 5, 'Incorrect number of challenges')
+    assert.equal(request[5].toNumber(), 4, 'Incorrect lastChallengeID')
     assert.equal(request[9].toNumber(), 7, 'Incorrect reasons bitmap')
     // Check the data of a random challenge as well.
     const challengeInfo = await proofH.getChallengeInfo(requester, 0, 3)
@@ -1706,7 +1692,11 @@ contract('ProofOfHumanity', function(accounts) {
       0,
       'The submission should have a default status'
     )
-    assert.equal(submission[4], true, 'The submission should be registered')
+    assert.equal(
+      await proofH.isRegistered(requester),
+      true,
+      'The submission should be registered'
+    )
   })
 
   it('Should set correct values if arbitrator refuses to rule', async () => {
@@ -1744,7 +1734,7 @@ contract('ProofOfHumanity', function(accounts) {
       'The submission should have a default status'
     )
     assert.equal(
-      submission[4],
+      await proofH.isRegistered(requester),
       false,
       'The submission should not be registered'
     )
@@ -1802,7 +1792,7 @@ contract('ProofOfHumanity', function(accounts) {
       'The submission should have a default status'
     )
     assert.equal(
-      submission[4],
+      submission[3],
       false,
       'The submission should not be registered'
     )
@@ -1896,7 +1886,7 @@ contract('ProofOfHumanity', function(accounts) {
       'The submission should have a default status'
     )
     assert.equal(
-      submission[4],
+      submission[3],
       false,
       'The submission should not be registered'
     )
@@ -1931,7 +1921,7 @@ contract('ProofOfHumanity', function(accounts) {
       'The submission should have a default status'
     )
     assert.equal(
-      submission[4],
+      submission[3],
       true,
       'The submission should still be registered'
     )
@@ -2009,19 +1999,19 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.processVouches(requester, 0, 1, { from: governor })
     const voucher1Info = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      voucher1Info[5],
+      voucher1Info[4],
       false,
       'First voucher should not be marked as used'
     )
     let voucher2Info = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      voucher2Info[5],
+      voucher2Info[4],
       true,
       'Second voucher should still be marked as used'
     )
     const submission1 = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      submission1[4],
+      submission1[3],
       true,
       'The first submission should still be registered'
     )
@@ -2029,13 +2019,13 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.processVouches(requester, 0, 1, { from: governor })
     voucher2Info = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      voucher2Info[5],
+      voucher2Info[4],
       false,
       'Second voucher should not be marked as used'
     )
     const submission2 = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      submission2[4],
+      submission2[3],
       true,
       'The second submission should still be registered'
     )
@@ -2080,13 +2070,13 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.processVouches(requester, 0, 2, { from: governor })
     let submission1 = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      submission1[4],
+      submission1[3],
       false,
       'The first submission should not be registered'
     )
     const submission2 = await proofH.getSubmissionInfo(voucher2)
     assert.equal(
-      submission2[4],
+      submission2[3],
       false,
       'The second submission should not be registered'
     )
@@ -2103,7 +2093,7 @@ contract('ProofOfHumanity', function(accounts) {
       'The first submission should have a default status'
     )
     assert.equal(
-      submission1[4],
+      submission1[3],
       false,
       'The first submission still should not be registered'
     )
@@ -2506,9 +2496,8 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Submission should not be registered after expiration', async () => {
     await time.increase(submissionDuration + 1)
-    const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(
-      submission[4],
+      await proofH.isRegistered(voucher1),
       false,
       'The submission should not be registered'
     )
