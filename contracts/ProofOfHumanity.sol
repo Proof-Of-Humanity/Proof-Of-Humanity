@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1]
- *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*]
+ *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -8,6 +8,7 @@
  */
 
 pragma solidity ^0.5.13;
+pragma experimental ABIEncoderV2;
 
 /* solium-disable max-len*/
 /* solium-disable error-reason */
@@ -147,6 +148,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     mapping(address => mapping(address => bool)) public vouches; // Indicates whether or not the voucher has vouched for a certain submission. vouches[voucherID][submissionID].
     mapping(address => mapping(uint => DisputeData)) public arbitratorDisputeIDToDisputeData; // Maps a dispute ID with its data. arbitratorDisputeIDToDisputeData[arbitrator][disputeID].
 
+    /* Modifiers */
+
+    modifier onlyGovernor {require(msg.sender == governor, "The caller must be the governor."); _;}
+
     /* Events */
 
     /**
@@ -205,12 +210,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _registrationMetaEvidence The URI of the meta evidence object for registration requests.
      *  @param _clearingMetaEvidence The URI of the meta evidence object for clearing requests.
      *  @param _submissionBaseDeposit The base deposit to make a request for a submission.
-     *  @param _submissionDuration Time in seconds during which the registered submission won't automatically lose its status.
-     *  @param _renewalPeriodDuration Value that defines the duration of submission's renewal period.
-     *  @param _challengePeriodDuration The time in seconds during which the request can be challenged.
-     *  @param _sharedStakeMultiplier Multiplier of the arbitration cost that each party has to pay as fee stake for a round when there is no winner/loser in the previous round (e.g. when it's the first round or the arbitrator refused to arbitrate). In basis points.
-     *  @param _winnerStakeMultiplier Multiplier of the arbitration cost that the winner has to pay as fee stake for a round in basis points.
-     *  @param _loserStakeMultiplier Multiplier of the arbitration cost that the loser has to pay as fee stake for a round in basis points.
+     *  @param _durationsAndMultipliers The array that contains uint64 storage parameters (durations and multipliers) to avoid 'stack too deep' error.
      *  @param _requiredNumberOfVouches The number of vouches the submission has to have to pass from Vouching to PendingRegistration state.
      */
     constructor(
@@ -219,12 +219,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         string memory _registrationMetaEvidence,
         string memory _clearingMetaEvidence,
         uint128 _submissionBaseDeposit,
-        uint64 _submissionDuration,
-        uint64 _renewalPeriodDuration,
-        uint64 _challengePeriodDuration,
-        uint64 _sharedStakeMultiplier,
-        uint64 _winnerStakeMultiplier,
-        uint64 _loserStakeMultiplier,
+        uint64[6] memory _durationsAndMultipliers,
         uint _requiredNumberOfVouches
     ) public {
         emit MetaEvidence(0, _registrationMetaEvidence);
@@ -232,12 +227,12 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         governor = msg.sender;
         submissionBaseDeposit = _submissionBaseDeposit;
-        submissionDuration = _submissionDuration;
-        renewalPeriodDuration = _renewalPeriodDuration;
-        challengePeriodDuration = _challengePeriodDuration;
-        sharedStakeMultiplier = _sharedStakeMultiplier;
-        winnerStakeMultiplier = _winnerStakeMultiplier;
-        loserStakeMultiplier = _loserStakeMultiplier;
+        submissionDuration = _durationsAndMultipliers[0];
+        renewalPeriodDuration = _durationsAndMultipliers[1];
+        challengePeriodDuration = _durationsAndMultipliers[2];
+        sharedStakeMultiplier = _durationsAndMultipliers[3];
+        winnerStakeMultiplier = _durationsAndMultipliers[4];
+        loserStakeMultiplier = _durationsAndMultipliers[5];
         requiredNumberOfVouches = _requiredNumberOfVouches;
 
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length++];
@@ -251,32 +246,32 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     // *      Governance      * //
     // ************************ //
 
-    /** @dev Allows the governor to directly add a new submission to the list as a part of the seeding event.
-     *  @param _submissionID The address of a newly added submission.
-     *  @param _evidence A link to evidence using its URI.
+    /** @dev Allows the governor to directly add new submissions to the list as a part of the seeding event.
+     *  @param _submissionIDs The addresses of newly added submissions.
+     *  @param _evidence The array of evidence links for each submission.
      */
-    function addSubmissionManually(address _submissionID, string calldata _evidence) external {
-        require(msg.sender == governor, "The caller must be the governor.");
-        Submission storage submission = submissions[_submissionID];
-        require(submission.requests.length == 0, "Submission already been created");
-        submission.index = submissionCounter;
-        submissionCounter++;
+    function addSubmissionManually(address[] calldata _submissionIDs, string[] calldata _evidence) external onlyGovernor {
+        for (uint i = 0; i < _submissionIDs.length; i++) {
+            Submission storage submission = submissions[_submissionIDs[i]];
+            require(submission.requests.length == 0, "Submission already been created");
+            submission.index = submissionCounter;
+            submissionCounter++;
 
-        Request storage request = submission.requests[submission.requests.length++];
-        submission.registered = true;
-        submission.submissionTime = uint64(now);
-        request.arbitratorDataID = uint16(arbitratorDataList.length - 1);
-        request.resolved = true;
+            Request storage request = submission.requests[submission.requests.length++];
+            submission.registered = true;
+            submission.submissionTime = uint64(now);
+            request.arbitratorDataID = uint16(arbitratorDataList.length - 1);
+            request.resolved = true;
 
-        if (bytes(_evidence).length > 0)
-            emit Evidence(arbitratorDataList[arbitratorDataList.length - 1].arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
+            if (bytes(_evidence[i]).length > 0)
+                emit Evidence(arbitratorDataList[arbitratorDataList.length - 1].arbitrator, submission.requests.length - 1 + uint(_submissionIDs[i]), msg.sender, _evidence[i]);
+        }
     }
 
     /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
      *  @param _submissionID The address of a submission to remove.
      */
-    function removeSubmissionManually(address _submissionID) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function removeSubmissionManually(address _submissionID) external onlyGovernor {
         Submission storage submission = submissions[_submissionID];
         require(submission.registered && submission.status == Status.None, "Wrong status");
         submission.registered = false;
@@ -285,8 +280,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Change the base amount required as a deposit to make a request for a submission.
      *  @param _submissionBaseDeposit The new base amount of wei required to make a new request.
      */
-    function changeSubmissionBaseDeposit(uint128 _submissionBaseDeposit) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeSubmissionBaseDeposit(uint128 _submissionBaseDeposit) external onlyGovernor {
         submissionBaseDeposit = _submissionBaseDeposit;
     }
 
@@ -294,8 +288,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  Note that in order to avoid unexpected behaviour the new value must fulfill: submissionDuration > challengePeriodDuration + renewalPeriodDuration.
      *  @param _submissionDuration The new duration of the time the submission is considered registered.
      */
-    function changeSubmissionDuration(uint64 _submissionDuration) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeSubmissionDuration(uint64 _submissionDuration) external onlyGovernor {
         submissionDuration = _submissionDuration;
     }
 
@@ -303,8 +296,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  Note that in order to avoid unexpected behaviour the new value must fulfill: submissionDuration > challengePeriodDuration + renewalPeriodDuration.
      *  @param _renewalPeriodDuration The new value that defines the duration of submission's renewal period.
      */
-    function changeRenewalPeriodDuration(uint64 _renewalPeriodDuration) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeRenewalPeriodDuration(uint64 _renewalPeriodDuration) external onlyGovernor {
         renewalPeriodDuration = _renewalPeriodDuration;
     }
 
@@ -312,48 +304,42 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  Note that in order to avoid unexpected behaviour the new value must fulfill: submissionDuration > challengePeriodDuration + renewalPeriodDuration.
      *  @param _challengePeriodDuration The new duration of the challenge period.
      */
-    function changeChallengePeriodDuration(uint64 _challengePeriodDuration) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeChallengePeriodDuration(uint64 _challengePeriodDuration) external onlyGovernor {
         challengePeriodDuration = _challengePeriodDuration;
     }
 
     /** @dev Change the number of vouches required for the request to pass to the pending state.
      *  @param _requiredNumberOfVouches The new required number of vouches.
      */
-    function changeRequiredNumberOfVouches(uint _requiredNumberOfVouches) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeRequiredNumberOfVouches(uint _requiredNumberOfVouches) external onlyGovernor {
         requiredNumberOfVouches = _requiredNumberOfVouches;
     }
 
     /** @dev Change the proportion of arbitration fees that must be paid as fee stake by parties when there is no winner or loser.
      *  @param _sharedStakeMultiplier Multiplier of arbitration fees that must be paid as fee stake. In basis points.
      */
-    function changeSharedStakeMultiplier(uint64 _sharedStakeMultiplier) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeSharedStakeMultiplier(uint64 _sharedStakeMultiplier) external onlyGovernor {
         sharedStakeMultiplier = _sharedStakeMultiplier;
     }
 
     /** @dev Change the proportion of arbitration fees that must be paid as fee stake by the winner of the previous round.
      *  @param _winnerStakeMultiplier Multiplier of arbitration fees that must be paid as fee stake. In basis points.
      */
-    function changeWinnerStakeMultiplier(uint64 _winnerStakeMultiplier) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeWinnerStakeMultiplier(uint64 _winnerStakeMultiplier) external onlyGovernor {
         winnerStakeMultiplier = _winnerStakeMultiplier;
     }
 
     /** @dev Change the proportion of arbitration fees that must be paid as fee stake by the party that lost the previous round.
      *  @param _loserStakeMultiplier Multiplier of arbitration fees that must be paid as fee stake. In basis points.
      */
-    function changeLoserStakeMultiplier(uint64 _loserStakeMultiplier) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeLoserStakeMultiplier(uint64 _loserStakeMultiplier) external onlyGovernor {
         loserStakeMultiplier = _loserStakeMultiplier;
     }
 
     /** @dev Change the governor of the contract.
      *  @param _governor The address of the new governor.
      */
-    function changeGovernor(address _governor) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeGovernor(address _governor) external onlyGovernor {
         governor = _governor;
     }
 
@@ -361,8 +347,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _registrationMetaEvidence The meta evidence to be used for future registration request disputes.
      *  @param _clearingMetaEvidence The meta evidence to be used for future clearing request disputes.
      */
-    function changeMetaEvidence(string calldata _registrationMetaEvidence, string calldata _clearingMetaEvidence) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeMetaEvidence(string calldata _registrationMetaEvidence, string calldata _clearingMetaEvidence) external onlyGovernor {
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length - 1];
         uint96 newMetaEvidenceUpdates = arbitratorData.metaEvidenceUpdates + 1;
         arbitratorDataList.push(ArbitratorData({
@@ -378,8 +363,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      *  @param _arbitrator The new trusted arbitrator to be used in the next requests.
      *  @param _arbitratorExtraData The extra data used by the new arbitrator.
      */
-    function changeArbitrator(IArbitrator _arbitrator, bytes calldata _arbitratorExtraData) external {
-        require(msg.sender == governor, "The caller must be the governor.");
+    function changeArbitrator(IArbitrator _arbitrator, bytes calldata _arbitratorExtraData) external onlyGovernor {
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length - 1];
         arbitratorDataList.push(ArbitratorData({
             arbitrator: _arbitrator,
@@ -886,7 +870,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         if (submission.status == Status.PendingRemoval) {
             if (_winner == Party.Requester)
-	            submission.registered = false;
+                submission.registered = false;
 
             submission.status = Status.None;
             request.resolved = true;

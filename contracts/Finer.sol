@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1]
- *  @reviewers: [@mtsalenc, @nix1g]
+ *  @reviewers: [@mtsalenc*, @nix1g*, @hbarcelos*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -42,7 +42,7 @@ contract Finer {
     function payFine(address payable _challenger, uint _disputeID) external payable {
         require(arbitrator.disputeStatus(_disputeID) == IArbitrator.DisputeStatus.Solved, "Dispute is not over yet");
         require(arbitrator.currentRuling(_disputeID) == CHALLENGER_WON, "No fine for this dispute");
-        _challenger.transfer(msg.value);
+        _challenger.send(msg.value); // Deliberate use of 'send' to avoid blocking the call.
         emit FinePaid(_challenger, msg.sender, _disputeID, msg.value);
     }
 }

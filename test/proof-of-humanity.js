@@ -62,19 +62,23 @@ contract('ProofOfHumanity', function(accounts) {
       registrationMetaEvidence,
       clearingMetaEvidence,
       submissionBaseDeposit,
-      submissionDuration,
-      renewalPeriodDuration,
-      challengePeriodDuration,
-      sharedStakeMultiplier,
-      winnerStakeMultiplier,
-      loserStakeMultiplier,
+      [
+        submissionDuration,
+        renewalPeriodDuration,
+        challengePeriodDuration,
+        sharedStakeMultiplier,
+        winnerStakeMultiplier,
+        loserStakeMultiplier
+      ],
       nbVouches,
       { from: governor }
     )
 
-    await proofH.addSubmissionManually(voucher1, '', { from: governor })
-    await proofH.addSubmissionManually(voucher2, '', { from: governor })
-    await proofH.addSubmissionManually(voucher3, '', { from: governor })
+    await proofH.addSubmissionManually(
+      [voucher1, voucher2, voucher3],
+      ['', '', ''],
+      { from: governor }
+    )
 
     requesterTotalCost = arbitrationCost + submissionBaseDeposit // Total sum: 1000 + 5000 = 6000
   })
@@ -177,7 +181,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     await expectRevert(
-      proofH.addSubmissionManually(voucher2, '', { from: governor }),
+      proofH.addSubmissionManually([voucher2], [''], { from: governor }),
       'Submission already been created'
     )
   })
@@ -303,7 +307,7 @@ contract('ProofOfHumanity', function(accounts) {
 
     // Check that manual actions are not possible as well.
     await expectRevert(
-      proofH.addSubmissionManually(requester, '', { from: governor }),
+      proofH.addSubmissionManually([requester], [''], { from: governor }),
       'Submission already been created'
     )
     await expectRevert(
@@ -2306,7 +2310,7 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Should make governance changes', async () => {
     await expectRevert(
-      proofH.addSubmissionManually(other, '', { from: other }),
+      proofH.addSubmissionManually([other], [''], { from: other }),
       'The caller must be the governor.'
     )
     await expectRevert(
