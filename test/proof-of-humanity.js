@@ -62,14 +62,10 @@ contract('ProofOfHumanity', function(accounts) {
       registrationMetaEvidence,
       clearingMetaEvidence,
       submissionBaseDeposit,
-      [
-        submissionDuration,
-        renewalPeriodDuration,
-        challengePeriodDuration,
-        sharedStakeMultiplier,
-        winnerStakeMultiplier,
-        loserStakeMultiplier
-      ],
+      submissionDuration,
+      renewalPeriodDuration,
+      challengePeriodDuration,
+      [sharedStakeMultiplier, winnerStakeMultiplier, loserStakeMultiplier],
       nbVouches,
       { from: governor }
     )
@@ -242,8 +238,8 @@ contract('ProofOfHumanity', function(accounts) {
       'Requester paidFees has not been registered correctly'
     )
     assert.equal(
-      round[2][1],
-      true,
+      round[2].toNumber(),
+      1,
       'Should register that requester paid his fees'
     )
     assert.equal(
@@ -275,27 +271,43 @@ contract('ProofOfHumanity', function(accounts) {
 
     assert.equal(
       txAddSubmission.logs[0].event,
-      'Evidence',
-      'The event has not been created'
+      'AddSubmission',
+      'The event AddSubmission has not been created'
     )
     assert.equal(
-      txAddSubmission.logs[0].args._arbitrator,
+      txAddSubmission.logs[0].args._submissionID,
+      requester,
+      'The event has wrong submission ID'
+    )
+    assert.equal(
+      txAddSubmission.logs[0].args._requestID,
+      0,
+      'The event has wrong request ID'
+    )
+
+    assert.equal(
+      txAddSubmission.logs[1].event,
+      'Evidence',
+      'The event Evidence has not been created'
+    )
+    assert.equal(
+      txAddSubmission.logs[1].args._arbitrator,
       arbitrator.address,
       'The event has wrong arbitrator address'
     )
     const evidenceGroupID = parseInt(requester, 16)
     assert.equal(
-      txAddSubmission.logs[0].args._evidenceGroupID,
+      txAddSubmission.logs[1].args._evidenceGroupID,
       evidenceGroupID,
       'The event has wrong evidence group ID'
     )
     assert.equal(
-      txAddSubmission.logs[0].args._party,
+      txAddSubmission.logs[1].args._party,
       requester,
       'The event has wrong requester address'
     )
     assert.equal(
-      txAddSubmission.logs[0].args._evidence,
+      txAddSubmission.logs[1].args._evidence,
       'evidence1',
       'The event has incorrect evidence'
     )
@@ -326,8 +338,8 @@ contract('ProofOfHumanity', function(accounts) {
       'PaidFees has not been registered correctly'
     )
     assert.equal(
-      round[2][1],
-      false,
+      round[2].toNumber(),
+      0,
       'Should not register that the requester paid his fees fully'
     )
     assert.equal(
@@ -359,8 +371,8 @@ contract('ProofOfHumanity', function(accounts) {
       'PaidFees has not been registered correctly after the 2nd payment of the requester'
     )
     assert.equal(
-      round[2][1],
-      false,
+      round[2].toNumber(),
+      0,
       'Should not register that requester paid his fees fully after the 2nd payment of the requester'
     )
     assert.equal(
@@ -386,8 +398,8 @@ contract('ProofOfHumanity', function(accounts) {
       'PaidFees has not been registered correctly after the first crowdfunder'
     )
     assert.equal(
-      round[2][1],
-      false,
+      round[2].toNumber(),
+      0,
       'Should not register that the requester paid his fees fully after the first crowdfunder'
     )
     assert.equal(
@@ -413,8 +425,8 @@ contract('ProofOfHumanity', function(accounts) {
       'PaidFees has not been registered correctly after the second crowdfunder'
     )
     assert.equal(
-      round[2][1],
-      true,
+      round[2].toNumber(),
+      1,
       'Should register that the requester paid his fees fully after the second crowdfunder'
     )
     assert.equal(
@@ -450,7 +462,7 @@ contract('ProofOfHumanity', function(accounts) {
       'You must fully fund your side'
     )
 
-    await proofH.removeSubmission(voucher1, 'evidence1', {
+    txRemove = await proofH.removeSubmission(voucher1, 'evidence1', {
       from: requester,
       value: requesterTotalCost + 1
     }) // Overpay a little to see if the registered payment is correct.
@@ -471,8 +483,8 @@ contract('ProofOfHumanity', function(accounts) {
       'PaidFees has not been registered correctly'
     )
     assert.equal(
-      round[2][1],
-      true,
+      round[2].toNumber(),
+      1,
       'Should register that the requester paid his fees fully'
     )
     assert.equal(
@@ -492,6 +504,27 @@ contract('ProofOfHumanity', function(accounts) {
       contribution[1].toNumber(),
       requesterTotalCost,
       'Requester contribution has not been registered correctly'
+    )
+
+    assert.equal(
+      txRemove.logs[0].event,
+      'RemoveSubmission',
+      'The event RemoveSubmission has not been created'
+    )
+    assert.equal(
+      txRemove.logs[0].args._requester,
+      requester,
+      'The event has wrong requester'
+    )
+    assert.equal(
+      txRemove.logs[0].args._submissionID,
+      voucher1,
+      'The event has wrong submission'
+    )
+    assert.equal(
+      txRemove.logs[0].args._requestID,
+      1,
+      'The event has wrong request ID'
     )
 
     // Check that it's not possible to make a removal request for a submission that is not registered.
@@ -680,7 +713,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Not enough valid vouches'
     )
     // Voucher whose submission time has expired.
-    await proofH.changeSubmissionDuration(10, { from: governor })
+    await proofH.changeDurations(10, 0, 0, { from: governor })
     await time.increase(10)
 
     await proofH.addVouch(requester, { from: voucher1 })
@@ -690,9 +723,14 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     // Change the submission time and nbVouches back to do another checks.
-    await proofH.changeSubmissionDuration(submissionDuration, {
-      from: governor
-    })
+    await proofH.changeDurations(
+      submissionDuration,
+      renewalPeriodDuration,
+      challengePeriodDuration,
+      {
+        from: governor
+      }
+    )
     await proofH.changeRequiredNumberOfVouches(nbVouches, { from: governor })
 
     // Check that the voucher can't be duplicated.
@@ -893,9 +931,9 @@ contract('ProofOfHumanity', function(accounts) {
       'Challenger paidFees has not been registered correctly'
     )
     assert.equal(
-      round[2][2],
-      true,
-      'Should register that challenger paid his fees'
+      round[2].toNumber(),
+      0,
+      'Should register that challenger paid his fees and set sideFunded back to 0'
     )
     assert.equal(
       round[3].toNumber(),
@@ -1342,8 +1380,13 @@ contract('ProofOfHumanity', function(accounts) {
     // Deliberately overpay to check that only required fee amount will be registered.
     await proofH.fundAppeal(requester, 0, 1, { from: requester, value: 1e18 })
 
-    // Fund appeal again to see if it doesn't cause anything.
-    await proofH.fundAppeal(requester, 0, 1, { from: requester, value: 1e18 })
+    await expectRevert(
+      proofH.fundAppeal(requester, 0, 1, {
+        from: requester,
+        value: 1e18
+      }),
+      'Side is already funded'
+    )
 
     roundInfo = await proofH.getRoundInfo(requester, 0, 0, 1) // Appeal rounds start with 1.
 
@@ -1353,8 +1396,8 @@ contract('ProofOfHumanity', function(accounts) {
       'Registered fee of the requester is incorrect'
     )
     assert.equal(
-      roundInfo[2][1],
-      true,
+      roundInfo[2].toNumber(),
+      1,
       'Did not register that the requester successfully paid his fees'
     )
 
@@ -1363,11 +1406,7 @@ contract('ProofOfHumanity', function(accounts) {
       0,
       'Should not register any payments for challenger'
     )
-    assert.equal(
-      roundInfo[2][2],
-      false,
-      'Should not register that challenger successfully paid fees'
-    )
+
     assert.equal(roundInfo[3].toNumber(), 1800, 'Incorrect FeeRewards value')
 
     const winnerAppealFee =
@@ -1390,9 +1429,9 @@ contract('ProofOfHumanity', function(accounts) {
       'Registered appeal fee of the challenger is incorrect'
     )
     assert.equal(
-      roundInfo[2][2],
-      true,
-      'Should register that the challenger successfully paid his fees'
+      roundInfo[2].toNumber(),
+      0,
+      'Should register that the challenger successfully paid his fees and set sideFunded to default'
     )
 
     assert.equal(
@@ -1404,14 +1443,9 @@ contract('ProofOfHumanity', function(accounts) {
     // If both sides pay their fees it starts new appeal round. Check that both sides have their values set to default.
     roundInfo = await proofH.getRoundInfo(requester, 0, 0, 2)
     assert.equal(
-      roundInfo[2][1],
-      false,
-      'Appeal fee payment for requester should not be registered in the new round'
-    )
-    assert.equal(
-      roundInfo[2][2],
-      false,
-      'Appeal fee payment for challenger should not be registered in the new round'
+      roundInfo[2].toNumber(),
+      0,
+      'sideFunded should be 0 in the new round'
     )
 
     // Resolve the first challenge to see if the new challenge will set correct values as well.
@@ -1438,8 +1472,8 @@ contract('ProofOfHumanity', function(accounts) {
       'Registered fee of the requester is incorrect'
     )
     assert.equal(
-      roundInfo[2][1],
-      true,
+      roundInfo[2].toNumber(),
+      1,
       'Did not register that the requester successfully paid his fees'
     )
     assert.equal(roundInfo[3].toNumber(), 1500, 'Incorrect FeeRewards value')
@@ -1457,9 +1491,9 @@ contract('ProofOfHumanity', function(accounts) {
       'Registered appeal fee of the challenger is incorrect'
     )
     assert.equal(
-      roundInfo[2][2],
-      true,
-      'Should register that the challenger successfully paid his fees'
+      roundInfo[2].toNumber(),
+      0,
+      'Should register that the challenger successfully paid his fees and set sideFunded to default'
     )
 
     assert.equal(
@@ -1470,14 +1504,9 @@ contract('ProofOfHumanity', function(accounts) {
 
     roundInfo = await proofH.getRoundInfo(requester, 0, 1, 2)
     assert.equal(
-      roundInfo[2][1],
-      false,
-      'Appeal fee payment for requester should not be registered in the new round'
-    )
-    assert.equal(
-      roundInfo[2][2],
-      false,
-      'Appeal fee payment for challenger should not be registered in the new round'
+      roundInfo[2].toNumber(),
+      0,
+      'sideFunded should be 0 in the new round'
     )
   })
 
@@ -2311,16 +2340,16 @@ contract('ProofOfHumanity', function(accounts) {
   it('Should make governance changes', async () => {
     await expectRevert(
       proofH.addSubmissionManually([other], [''], { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await expectRevert(
       proofH.removeSubmissionManually(voucher1, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     // submissionBaseDeposit
     await expectRevert(
       proofH.changeSubmissionBaseDeposit(22, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeSubmissionBaseDeposit(22, { from: governor })
     assert.equal(
@@ -2328,34 +2357,27 @@ contract('ProofOfHumanity', function(accounts) {
       22,
       'Incorrect submissionBaseDeposit value'
     )
-    // submissionDuration
+    // submissionDuration, renewalPeriodDuration, challengePeriodDuration
     await expectRevert(
-      proofH.changeSubmissionDuration(28, { from: other }),
-      'The caller must be the governor.'
+      proofH.changeDurations(128, 94, 14, { from: other }),
+      'The caller must be the governor'
     )
-    await proofH.changeSubmissionDuration(28, { from: governor })
+    await expectRevert(
+      proofH.changeDurations(28, 94, 14, { from: governor }),
+      'Incorrect inputs'
+    )
+
+    await proofH.changeDurations(128, 94, 14, { from: governor })
     assert.equal(
       (await proofH.submissionDuration()).toNumber(),
-      28,
+      128,
       'Incorrect submissionDuration value'
     )
-    // renewalPeriodDuration
-    await expectRevert(
-      proofH.changeRenewalPeriodDuration(94, { from: other }),
-      'The caller must be the governor.'
-    )
-    await proofH.changeRenewalPeriodDuration(94, { from: governor })
     assert.equal(
       (await proofH.renewalPeriodDuration()).toNumber(),
       94,
       'Incorrect renewalPeriodDuration value'
     )
-    // challengePeriodDuration
-    await expectRevert(
-      proofH.changeChallengePeriodDuration(14, { from: other }),
-      'The caller must be the governor.'
-    )
-    await proofH.changeChallengePeriodDuration(14, { from: governor })
     assert.equal(
       (await proofH.challengePeriodDuration()).toNumber(),
       14,
@@ -2364,7 +2386,7 @@ contract('ProofOfHumanity', function(accounts) {
     // requiredNumberOfVouches
     await expectRevert(
       proofH.changeRequiredNumberOfVouches(1223, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeRequiredNumberOfVouches(1223, { from: governor })
     assert.equal(
@@ -2375,7 +2397,7 @@ contract('ProofOfHumanity', function(accounts) {
     // sharedStakeMultiplier
     await expectRevert(
       proofH.changeSharedStakeMultiplier(555, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeSharedStakeMultiplier(555, { from: governor })
     assert.equal(
@@ -2386,7 +2408,7 @@ contract('ProofOfHumanity', function(accounts) {
     // winnerStakeMultiplier
     await expectRevert(
       proofH.changeWinnerStakeMultiplier(2001, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeWinnerStakeMultiplier(2001, { from: governor })
     assert.equal(
@@ -2397,7 +2419,7 @@ contract('ProofOfHumanity', function(accounts) {
     // loserStakeMultiplier
     await expectRevert(
       proofH.changeLoserStakeMultiplier(9555, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeLoserStakeMultiplier(9555, { from: governor })
     assert.equal(
@@ -2408,14 +2430,14 @@ contract('ProofOfHumanity', function(accounts) {
     // governor
     await expectRevert(
       proofH.changeGovernor(other, { from: other }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeGovernor(other, { from: governor })
     assert.equal(await proofH.governor(), other, 'Incorrect governor value')
     // metaEvidenceUpdates
     await expectRevert(
       proofH.changeMetaEvidence('1', '2', { from: governor }),
-      'The caller must be the governor.' // Check that the old governor can't change variables anymore.
+      'The caller must be the governor' // Check that the old governor can't change variables anymore.
     )
     await proofH.changeMetaEvidence('1', '2', { from: other })
     let arbitratorData = await proofH.arbitratorDataList(1)
@@ -2432,7 +2454,7 @@ contract('ProofOfHumanity', function(accounts) {
     // arbitrator
     await expectRevert(
       proofH.changeArbitrator(governor, '0xff', { from: governor }),
-      'The caller must be the governor.'
+      'The caller must be the governor'
     )
     await proofH.changeArbitrator(governor, '0xff', { from: other })
     arbitratorData = await proofH.arbitratorDataList(2)
