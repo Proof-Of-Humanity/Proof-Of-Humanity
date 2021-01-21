@@ -719,7 +719,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Not enough valid vouches'
     )
     // Voucher whose submission time has expired.
-    await proofH.changeDurations(10, 0, 0, { from: governor })
+    await proofH.changeDurations(9, 0, 0, { from: governor })
     await time.increase(10)
 
     await proofH.addVouch(requester, { from: voucher1 })
@@ -931,7 +931,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Not enough valid vouches'
     )
     // Voucher whose submission time has expired.
-    await proofH.changeDurations(10, 0, 0, { from: governor })
+    await proofH.changeDurations(9, 0, 0 { from: governor })
     await time.increase(10)
 
     const vouch1_1 = await web3.eth.sign(
