@@ -1,8 +1,43 @@
 /* eslint-disable no-undef */ // Avoid the linter considering truffle elements as undef.
 const { BN, expectRevert, time } = require('openzeppelin-test-helpers')
+const util = require('util')
 
 const ProofOfHumanity = artifacts.require('ProofOfHumanity')
 const Arbitrator = artifacts.require('EnhancedAppealableArbitrator')
+
+// Promisify signTypedData, note that MetaMask defaults to eth_signTypedData_v1 instead of eth_signTypedData_v4
+web3.eth.signTypedData = async function(typedData, from) {
+  const send = util.promisify(web3.eth.currentProvider.send)
+
+  const args = {
+    jsonrpc: '2.0',
+    method: 'eth_signTypedData',
+    params: [from, typedData]
+  }
+
+  return send(args).then(value => value.result)
+}
+
+// Declare typed data
+const voucherTemplate = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' }
+    ],
+    IsHumanVoucher: [
+      { name: 'vouchedSubmission', type: 'address' },
+      { name: 'voucherExpirationTimestamp', type: 'uint256' }
+    ]
+  },
+  primaryType: 'IsHumanVoucher',
+  domain: {
+    name: 'Proof of Humanity',
+    chainId: null,
+    verifyingContract: null
+  }
+}
 
 contract('ProofOfHumanity', function(accounts) {
   const governor = accounts[0]
@@ -69,6 +104,9 @@ contract('ProofOfHumanity', function(accounts) {
       nbVouches,
       { from: governor }
     )
+
+    voucherTemplate.domain.chainId = 1 // ganache-cli's EVM uses 1 despite reporting 1337 through web3.eth.getChainId()
+    voucherTemplate.domain.verifyingContract = proofH.address
 
     await proofH.addSubmissionManually(
       [voucher1, voucher2, voucher3],
@@ -784,44 +822,47 @@ contract('ProofOfHumanity', function(accounts) {
   it('Should allow signed vouches', async () => {
     await proofH.addSubmission('evidence1', { from: requester })
 
-    const timeout = (await time.latest()).add(new BN(15768000)) // Expires in 6 months
+    const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
 
-    const vouch1 = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester.slice(2), 'hex'),
-          Buffer.from(
-            new Array(0x20 - timeout.toArray().length)
-              .fill(0)
-              .concat(timeout.toArray())
-          )
-        ]).toString('hex'),
+    const vouch1 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
       voucher1
     )
 
-    const vouch2 = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester.slice(2), 'hex'),
-          Buffer.from(
-            new Array(0x20 - timeout.toArray().length)
-              .fill(0)
-              .concat(timeout.toArray())
-          )
-        ]).toString('hex'),
+    const vouch2 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
       voucher2
     )
 
-    const vouchInvalid = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester.slice(2), 'hex'),
-          Buffer.from(new Array(0x1f).fill(0).concat([1]))
-        ]).toString('hex'),
-      other
+    const vouchInvalid = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: (await time.latest())
+              .sub(new BN(1))
+              .toNumber()
+          }
+        },
+        voucherTemplate
+      ),
+      voucher1
     )
 
     await expectRevert(
@@ -889,33 +930,34 @@ contract('ProofOfHumanity', function(accounts) {
       }),
       'Not enough valid vouches'
     )
-    const timeout = (await time.latest()).add(new BN(15768000)) // Expires in 6 months
-    const vouch2_2 = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester2.slice(2), 'hex'),
-          Buffer.from(
-            new Array(0x20 - timeout.toArray().length)
-              .fill(0)
-              .concat(timeout.toArray())
-          )
-        ]).toString('hex'),
+    const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
+
+    const vouch2_2 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester2,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
       voucher2
     )
-    const vouch2_1 = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester.slice(2), 'hex'),
-          Buffer.from(
-            new Array(0x20 - timeout.toArray().length)
-              .fill(0)
-              .concat(timeout.toArray())
-          )
-        ]).toString('hex'),
+
+    const vouch2_1 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
       voucher2
     )
+
     // Voucher who already vouched for a different submission.
     await proofH.addSubmission('evidence1', {
       from: requester2,
@@ -934,19 +976,19 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeDurations(9, 0, 0 { from: governor })
     await time.increase(10)
 
-    const vouch1_1 = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester.slice(2), 'hex'),
-          Buffer.from(
-            new Array(0x20 - timeout.toArray().length)
-              .fill(0)
-              .concat(timeout.toArray())
-          )
-        ]).toString('hex'),
-      voucher2
+    const vouch1_1 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher1
     )
+
     await expectRevert(
       proofH.changeStateToPending(requester, [], [vouch1_1], [timeout], {
         from: governor
@@ -986,19 +1028,18 @@ contract('ProofOfHumanity', function(accounts) {
       value: requesterTotalCost
     })
 
-    const timeout = (await time.latest()).add(new BN(15768000)) // Expires in 6 months
+    const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
 
-    const vouch = await web3.eth.sign(
-      '0x' +
-        Buffer.concat([
-          Buffer.from('ProofOfHumanity'),
-          Buffer.from(requester.slice(2), 'hex'),
-          Buffer.from(
-            new Array(0x20 - timeout.toArray().length)
-              .fill(0)
-              .concat(timeout.toArray())
-          )
-        ]).toString('hex'),
+    const vouch = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
       voucher1
     )
     await proofH.addVouch(requester, { from: voucher2 })
