@@ -5,7 +5,7 @@ const util = require('util')
 const ProofOfHumanity = artifacts.require('ProofOfHumanity')
 const Arbitrator = artifacts.require('EnhancedAppealableArbitrator')
 
-// Promisify signTypedData, note that MetaMask defaults to eth_signTypedData_v1 instead of eth_signTypedData_v4
+// Promisify signTypedData, note that MetaMask defaults to eth_signTypedData_v1 instead of eth_signTypedData_v4.
 web3.eth.signTypedData = async function(typedData, from) {
   const send = util.promisify(web3.eth.currentProvider.send)
 
@@ -18,7 +18,7 @@ web3.eth.signTypedData = async function(typedData, from) {
   return send(args).then(value => value.result)
 }
 
-// Declare typed data
+// Declare typed data.
 const voucherTemplate = {
   types: {
     EIP712Domain: [
@@ -105,7 +105,7 @@ contract('ProofOfHumanity', function(accounts) {
       { from: governor }
     )
 
-    voucherTemplate.domain.chainId = 1 // ganache-cli's EVM uses 1 despite reporting 1337 through web3.eth.getChainId()
+    voucherTemplate.domain.chainId = 1 // ganache-cli's EVM uses 1 despite reporting 1337 through web3.eth.getChainId().
     voucherTemplate.domain.verifyingContract = proofH.address
 
     await proofH.addSubmissionManually(

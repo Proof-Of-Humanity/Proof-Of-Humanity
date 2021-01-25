@@ -1,5 +1,5 @@
 /**
- *  @authors: [@unknownunknown1]
+ *  @authors: [@unknownunknown1, @nix1g]
  *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*]
  *  @auditors: []
  *  @bounties: []
@@ -37,6 +37,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     uint private constant AUTO_PROCESSED_VOUCH = 10; // The number of vouches that will be automatically processed when executing a request.
     uint private constant FULL_REASONS_SET = 15; // Indicates that reasons' bitmap is full. 0b1111.
     uint private constant MULTIPLIER_DIVISOR = 10000; // Divisor parameter for multipliers.
+
+    bytes32 private constant IS_HUMAN_VOUCHER_TYPEHASH = 0xa9e3fa1df5c3dbef1e9cfb610fa780355a0b5e0acb0fa8249777ec973ca789dc; // The EIP-712 typeHash of IsHumanVoucher. keccak256("IsHumanVoucher(address vouchedSubmission,uint256 voucherExpirationTimestamp)").
+    bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. Used to verify an IsHumanVoucher's signature.
 
     /* Enums */
 
@@ -149,9 +152,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     mapping(address => mapping(address => bool)) public vouches; // Indicates whether or not the voucher has vouched for a certain submission. vouches[voucherID][submissionID].
     mapping(address => mapping(uint => DisputeData)) public arbitratorDisputeIDToDisputeData; // Maps a dispute ID with its data. arbitratorDisputeIDToDisputeData[arbitrator][disputeID].
 
-    bytes32 constant IS_HUMAN_VOUCHER_TYPEHASH = 0xa9e3fa1df5c3dbef1e9cfb610fa780355a0b5e0acb0fa8249777ec973ca789dc; // The EIP-712 typeHash of IsHumanVoucher. keccak256("IsHumanVoucher(address vouchedSubmission,uint256 voucherExpirationTimestamp)")
-    bytes32 DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. Used to verify an IsHumanVoucher's signature.
-
     /* Modifiers */
 
     modifier onlyGovernor {require(msg.sender == governor, "The caller must be the governor"); _;}
@@ -262,9 +262,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         arbitratorData.arbitratorExtraData = _arbitratorExtraData;
 
         // EIP-712
-        bytes32 DOMAIN_TYPEHASH = 0x8cad95687ba82c2ce50e74f7b754645e5117c3a5bec8151c0726d5857980a866; // keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)")
+        bytes32 DOMAIN_TYPEHASH = 0x8cad95687ba82c2ce50e74f7b754645e5117c3a5bec8151c0726d5857980a866; // keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)").
         uint256 chainId;
-        assembly { chainId := chainid } // block.chainid got introduced in Solidity v0.8.0
+        assembly { chainId := chainid } // block.chainid got introduced in Solidity v0.8.0.
         DOMAIN_SEPARATOR = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("Proof of Humanity"), chainId, address(this)));
     }
 
@@ -495,8 +495,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Change submission's state from Vouching to PendingRegistration if all conditions are met.
      *  @param _submissionID The address of the submission which status to change.
      *  @param _vouches Array of users which vouches to count.
-     *  @param _signatures Array of EIP-712 signatures of struct IsHumanVoucher (optional)
-     *  @param _expirationTimestamps Array of expiration timestamps for each signature (optional)
+     *  @param _signatures Array of EIP-712 signatures of struct IsHumanVoucher (optional).
+     *  @param _expirationTimestamps Array of expiration timestamps for each signature (optional).
      *  struct IsHumanVoucher {
      *      address vouchedSubmission;
      *      uint256 voucherExpirationTimestamp;
@@ -520,11 +520,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             address voucherAddress;
             /* solium-disable indentation */
             {
-                // Get typed structure hash
+                // Get typed structure hash.
                 bytes32 messageHash = keccak256(abi.encode(IS_HUMAN_VOUCHER_TYPEHASH, _submissionID, _expirationTimestamps[i]));
                 bytes32 hash = keccak256(abi.encodePacked(PREFIX, DOMAIN_SEPARATOR, messageHash));
 
-                // Decode the signature
+                // Decode the signature.
                 bytes memory signature = _signatures[i];
                 bytes32 r;
                 bytes32 s;
@@ -537,7 +537,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                 if (v < 27) v += 27;
                 require(v == 27 || v == 28, "Invalid signature");
 
-                // Recover the signer's address
+                // Recover the signer's address.
                 voucherAddress = ecrecover(hash, v, r, s);
             }
             /* solium-enable indentation */
