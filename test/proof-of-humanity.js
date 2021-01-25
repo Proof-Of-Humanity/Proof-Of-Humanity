@@ -883,12 +883,44 @@ contract('ProofOfHumanity', function(accounts) {
       value: requesterTotalCost
     })
     // Deliberately add "bad" voucher to see if the count is correct.
-    await proofH.changeStateToPending(
+    let txChangeState = await proofH.changeStateToPending(
       requester,
       [],
       [vouch1, vouchInvalid, vouchInvalid, vouch2, vouch2],
       [timeout, timeout, 1, 0, timeout],
       { from: governor }
+    )
+
+    // Check vouching events.
+    assert.equal(
+      txChangeState.logs[0].event,
+      'VouchAdded',
+      'The first event VouchAdded has not been created'
+    )
+    assert.equal(
+      txChangeState.logs[0].args._submissionID,
+      requester,
+      'The first event VouchAdded has wrong submission address'
+    )
+    assert.equal(
+      txChangeState.logs[0].args._voucher,
+      voucher1,
+      'The first event VouchAdded has wrong voucher address'
+    )
+    assert.equal(
+      txChangeState.logs[1].event,
+      'VouchAdded',
+      'The second event VouchAdded has not been created'
+    )
+    assert.equal(
+      txChangeState.logs[1].args._submissionID,
+      requester,
+      'The second event VouchAdded has wrong submission address'
+    )
+    assert.equal(
+      txChangeState.logs[1].args._voucher,
+      voucher2,
+      'The second event VouchAdded has wrong voucher address'
     )
 
     const submission = await proofH.getSubmissionInfo(requester)

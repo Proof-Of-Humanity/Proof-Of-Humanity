@@ -547,6 +547,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             now < _expirationTimestamps[i] && _submissionID != voucherAddress) {
                 request.vouches.push(voucherAddress);
                 voucher.hasVouched = true;
+                emit VouchAdded(_submissionID, voucherAddress);
             }
         }
 
