@@ -1,8 +1,43 @@
 /* eslint-disable no-undef */ // Avoid the linter considering truffle elements as undef.
 const { BN, expectRevert, time } = require('openzeppelin-test-helpers')
+const util = require('util')
 
 const ProofOfHumanity = artifacts.require('ProofOfHumanity')
 const Arbitrator = artifacts.require('EnhancedAppealableArbitrator')
+
+// Promisify signTypedData, note that MetaMask defaults to eth_signTypedData_v1 instead of eth_signTypedData_v4.
+web3.eth.signTypedData = async function(typedData, from) {
+  const send = util.promisify(web3.eth.currentProvider.send)
+
+  const args = {
+    jsonrpc: '2.0',
+    method: 'eth_signTypedData',
+    params: [from, typedData]
+  }
+
+  return send(args).then(value => value.result)
+}
+
+// Declare typed data.
+const voucherTemplate = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' }
+    ],
+    IsHumanVoucher: [
+      { name: 'vouchedSubmission', type: 'address' },
+      { name: 'voucherExpirationTimestamp', type: 'uint256' }
+    ]
+  },
+  primaryType: 'IsHumanVoucher',
+  domain: {
+    name: 'Proof of Humanity',
+    chainId: null,
+    verifyingContract: null
+  }
+}
 
 contract('ProofOfHumanity', function(accounts) {
   const governor = accounts[0]
@@ -69,6 +104,9 @@ contract('ProofOfHumanity', function(accounts) {
       nbVouches,
       { from: governor }
     )
+
+    voucherTemplate.domain.chainId = 1 // ganache-cli's EVM uses 1 despite reporting 1337 through web3.eth.getChainId().
+    voucherTemplate.domain.verifyingContract = proofH.address
 
     await proofH.addSubmissionManually(
       [voucher1, voucher2, voucher3],
@@ -644,7 +682,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher2 })
 
     await expectRevert(
-      proofH.changeStateToPending(requester, [voucher1, voucher2], {
+      proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
         from: governor
       }),
       'Requester is not funded'
@@ -658,6 +696,8 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeStateToPending(
       requester,
       [governor, voucher1, challenger1, voucher2, other],
+      [],
+      [],
       { from: governor }
     )
 
@@ -690,12 +730,14 @@ contract('ProofOfHumanity', function(accounts) {
 
     // Empty array of vouchers.
     await expectRevert(
-      proofH.changeStateToPending(requester, [], { from: governor }),
+      proofH.changeStateToPending(requester, [], [], [], { from: governor }),
       'Not enough valid vouches'
     )
     // Array with voucher who didn't vouch.
     await expectRevert(
-      proofH.changeStateToPending(requester, [voucher1], { from: governor }),
+      proofH.changeStateToPending(requester, [voucher1], [], [], {
+        from: governor
+      }),
       'Not enough valid vouches'
     )
     // Voucher who already vouched for a different submission.
@@ -705,20 +747,24 @@ contract('ProofOfHumanity', function(accounts) {
     })
     await proofH.addVouch(requester, { from: voucher2 })
     await proofH.addVouch(requester2, { from: voucher2 })
-    await proofH.changeStateToPending(requester2, [voucher2], {
+    await proofH.changeStateToPending(requester2, [voucher2], [], [], {
       from: governor
     })
     await expectRevert(
-      proofH.changeStateToPending(requester, [voucher2], { from: governor }),
+      proofH.changeStateToPending(requester, [voucher2], [], [], {
+        from: governor
+      }),
       'Not enough valid vouches'
     )
     // Voucher whose submission time has expired.
-    await proofH.changeDurations(10, 0, 0, { from: governor })
+    await proofH.changeDurations(9, 0, 0, { from: governor })
     await time.increase(10)
 
     await proofH.addVouch(requester, { from: voucher1 })
     await expectRevert(
-      proofH.changeStateToPending(requester, [voucher1], { from: governor }),
+      proofH.changeStateToPending(requester, [voucher1], [], [], {
+        from: governor
+      }),
       'Not enough valid vouches'
     )
 
@@ -735,7 +781,7 @@ contract('ProofOfHumanity', function(accounts) {
 
     // Check that the voucher can't be duplicated.
     await expectRevert(
-      proofH.changeStateToPending(requester, [voucher1, voucher1], {
+      proofH.changeStateToPending(requester, [voucher1, voucher1], [], [], {
         from: governor
       }),
       'Not enough valid vouches'
@@ -753,6 +799,8 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeStateToPending(
       requester,
       [voucher1, voucher2, voucher3],
+      [],
+      [],
       { from: governor }
     )
     const voucher1Info = await proofH.getSubmissionInfo(voucher1)
@@ -769,6 +817,275 @@ contract('ProofOfHumanity', function(accounts) {
     )
     const voucher3Info = await proofH.getSubmissionInfo(voucher3)
     assert.equal(voucher3Info[4], false, 'Third voucher should not be used')
+  })
+
+  it('Should allow signed vouches', async () => {
+    await proofH.addSubmission('evidence1', { from: requester })
+
+    const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
+
+    const vouch1 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher1
+    )
+
+    const vouch2 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher2
+    )
+
+    const vouchInvalid = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: (await time.latest())
+              .sub(new BN(1))
+              .toNumber()
+          }
+        },
+        voucherTemplate
+      ),
+      voucher1
+    )
+
+    await expectRevert(
+      proofH.changeStateToPending(
+        requester,
+        [],
+        [vouch1, vouch2],
+        [timeout, timeout],
+        {
+          from: governor
+        }
+      ),
+      'Requester is not funded'
+    )
+
+    await proofH.fundSubmission(requester, {
+      from: requester,
+      value: requesterTotalCost
+    })
+    // Deliberately add "bad" voucher to see if the count is correct.
+    let txChangeState = await proofH.changeStateToPending(
+      requester,
+      [],
+      [vouch1, vouchInvalid, vouchInvalid, vouch2, vouch2],
+      [timeout, timeout, 1, 0, timeout],
+      { from: governor }
+    )
+
+    // Check vouching events.
+    assert.equal(
+      txChangeState.logs[0].event,
+      'VouchAdded',
+      'The first event VouchAdded has not been created'
+    )
+    assert.equal(
+      txChangeState.logs[0].args._submissionID,
+      requester,
+      'The first event VouchAdded has wrong submission address'
+    )
+    assert.equal(
+      txChangeState.logs[0].args._voucher,
+      voucher1,
+      'The first event VouchAdded has wrong voucher address'
+    )
+    assert.equal(
+      txChangeState.logs[1].event,
+      'VouchAdded',
+      'The second event VouchAdded has not been created'
+    )
+    assert.equal(
+      txChangeState.logs[1].args._submissionID,
+      requester,
+      'The second event VouchAdded has wrong submission address'
+    )
+    assert.equal(
+      txChangeState.logs[1].args._voucher,
+      voucher2,
+      'The second event VouchAdded has wrong voucher address'
+    )
+
+    const submission = await proofH.getSubmissionInfo(requester)
+    assert.equal(submission[0].toNumber(), 2, 'Submission has incorrect status')
+
+    const voucher1Info = await proofH.getSubmissionInfo(voucher1)
+    assert.equal(voucher1Info[4], true, 'Did not register the first vouch')
+    const voucher2Info = await proofH.getSubmissionInfo(voucher2)
+    assert.equal(voucher2Info[4], true, 'Did not register the second vouch')
+
+    const storedVouches = (
+      await proofH.getNumberOfVouches(requester, 0)
+    ).toNumber()
+    assert.equal(
+      storedVouches,
+      2,
+      'Incorrect number of vouches stored in submission request'
+    )
+  })
+
+  it('Check that invalid signed vouches are not counted', async () => {
+    // Change required number of vouches to 1 to make checks more transparent
+    await proofH.changeRequiredNumberOfVouches(1, { from: governor })
+
+    await proofH.addSubmission('evidence1', {
+      from: requester,
+      value: requesterTotalCost
+    })
+
+    // Empty array of vouchers.
+    await expectRevert(
+      proofH.changeStateToPending(requester, [], [], [], { from: governor }),
+      'Not enough valid vouches'
+    )
+    // Array with voucher who didn't vouch.
+    await expectRevert(
+      proofH.changeStateToPending(requester, [voucher1], [], [], {
+        from: governor
+      }),
+      'Not enough valid vouches'
+    )
+    const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
+
+    const vouch2_2 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester2,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher2
+    )
+
+    const vouch2_1 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher2
+    )
+
+    // Voucher who already vouched for a different submission.
+    await proofH.addSubmission('evidence1', {
+      from: requester2,
+      value: requesterTotalCost
+    })
+    await proofH.changeStateToPending(requester2, [], [vouch2_2], [timeout], {
+      from: governor
+    })
+    await expectRevert(
+      proofH.changeStateToPending(requester, [], [vouch2_1], [timeout], {
+        from: governor
+      }),
+      'Not enough valid vouches'
+    )
+    // Voucher whose submission time has expired.
+    await proofH.changeDurations(9, 0, 0, { from: governor })
+    await time.increase(10)
+
+    const vouch1_1 = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher1
+    )
+
+    await expectRevert(
+      proofH.changeStateToPending(requester, [], [vouch1_1], [timeout], {
+        from: governor
+      }),
+      'Not enough valid vouches'
+    )
+
+    // Change the submission time and nbVouches back to do another checks.
+    await proofH.changeDurations(
+      submissionDuration,
+      renewalPeriodDuration,
+      challengePeriodDuration,
+      {
+        from: governor
+      }
+    )
+    await proofH.changeRequiredNumberOfVouches(nbVouches, { from: governor })
+
+    // Check that the voucher can't be duplicated.
+    await expectRevert(
+      proofH.changeStateToPending(
+        requester,
+        [],
+        [vouch1_1, vouch1_1],
+        [timeout, timeout],
+        {
+          from: governor
+        }
+      ),
+      'Not enough valid vouches'
+    )
+  })
+
+  it('Should allow a mixture of signed and stored vouches', async () => {
+    await proofH.addSubmission('evidence1', {
+      from: requester,
+      value: requesterTotalCost
+    })
+
+    const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
+
+    const vouch = await web3.eth.signTypedData(
+      Object.assign(
+        {
+          message: {
+            vouchedSubmission: requester,
+            voucherExpirationTimestamp: timeout
+          }
+        },
+        voucherTemplate
+      ),
+      voucher1
+    )
+    await proofH.addVouch(requester, { from: voucher2 })
+
+    proofH.changeStateToPending(requester, [voucher2], [vouch], [timeout], {
+      from: governor
+    })
+
+    const submission = await proofH.getSubmissionInfo(requester)
+    assert.equal(submission[0].toNumber(), 2, 'Submission has incorrect status')
+    const voucher1Info = await proofH.getSubmissionInfo(voucher1)
+    assert.equal(voucher1Info[4], true, 'Did not register the first vouch')
+    const voucher2Info = await proofH.getSubmissionInfo(voucher2)
+    assert.equal(voucher2Info[4], true, 'Did not register the second vouch')
   })
 
   it('Should set correct values and create a dispute after the submission is challenged', async () => {
@@ -812,7 +1129,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Wrong status'
     )
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1024,7 +1341,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
     await time.increase(challengePeriodDuration + 1)
@@ -1048,7 +1365,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1245,7 +1562,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1335,7 +1652,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1518,7 +1835,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
     await proofH.challengeRequest(
@@ -1564,7 +1881,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1629,7 +1946,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1740,7 +2057,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1803,7 +2120,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1847,7 +2164,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -1974,7 +2291,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
     await proofH.challengeRequest(
@@ -2009,7 +2326,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -2075,7 +2392,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -2094,7 +2411,9 @@ contract('ProofOfHumanity', function(accounts) {
       value: requesterTotalCost
     })
     await proofH.addVouch(voucher1, { from: voucher3 })
-    await proofH.changeStateToPending(voucher1, [voucher3], { from: governor })
+    await proofH.changeStateToPending(voucher1, [voucher3], [], [], {
+      from: governor
+    })
 
     await arbitrator.giveRuling(1, 2)
     await time.increase(appealTimeOut + 1)
@@ -2142,7 +2461,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -2222,7 +2541,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher2 })
     await proofH.fundSubmission(requester, { from: other, value: 1e18 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 
@@ -2282,7 +2601,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addVouch(requester, { from: voucher1 })
     await proofH.addVouch(requester, { from: voucher2 })
 
-    await proofH.changeStateToPending(requester, [voucher1, voucher2], {
+    await proofH.changeStateToPending(requester, [voucher1, voucher2], [], [], {
       from: governor
     })
 

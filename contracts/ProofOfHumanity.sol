@@ -1,5 +1,5 @@
 /**
- *  @authors: [@unknownunknown1]
+ *  @authors: [@unknownunknown1, @nix1g]
  *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*]
  *  @auditors: []
  *  @bounties: []
@@ -37,6 +37,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     uint private constant AUTO_PROCESSED_VOUCH = 10; // The number of vouches that will be automatically processed when executing a request.
     uint private constant FULL_REASONS_SET = 15; // Indicates that reasons' bitmap is full. 0b1111.
     uint private constant MULTIPLIER_DIVISOR = 10000; // Divisor parameter for multipliers.
+
+    bytes32 private constant IS_HUMAN_VOUCHER_TYPEHASH = 0xa9e3fa1df5c3dbef1e9cfb610fa780355a0b5e0acb0fa8249777ec973ca789dc; // The EIP-712 typeHash of IsHumanVoucher. keccak256("IsHumanVoucher(address vouchedSubmission,uint256 voucherExpirationTimestamp)").
+    bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. Used to verify an IsHumanVoucher's signature.
 
     /* Enums */
 
@@ -257,6 +260,12 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length++];
         arbitratorData.arbitrator = _arbitrator;
         arbitratorData.arbitratorExtraData = _arbitratorExtraData;
+
+        // EIP-712
+        bytes32 DOMAIN_TYPEHASH = 0x8cad95687ba82c2ce50e74f7b754645e5117c3a5bec8151c0726d5857980a866; // keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)").
+        uint256 chainId;
+        assembly { chainId := chainid } // block.chainid got introduced in Solidity v0.8.0.
+        DOMAIN_SEPARATOR = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("Proof of Humanity"), chainId, address(this)));
     }
 
     /* External and Public */
@@ -486,16 +495,62 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Change submission's state from Vouching to PendingRegistration if all conditions are met.
      *  @param _submissionID The address of the submission which status to change.
      *  @param _vouches Array of users which vouches to count.
+     *  @param _signatures Array of EIP-712 signatures of struct IsHumanVoucher (optional).
+     *  @param _expirationTimestamps Array of expiration timestamps for each signature (optional).
+     *  struct IsHumanVoucher {
+     *      address vouchedSubmission;
+     *      uint256 voucherExpirationTimestamp;
+     *  }
      */
-    function changeStateToPending(address _submissionID, address[] calldata _vouches) external {
+    function changeStateToPending(address _submissionID, address[] calldata _vouches, bytes[] calldata _signatures, uint[] calldata _expirationTimestamps) external {
         Submission storage submission = submissions[_submissionID];
         require(submission.status == Status.Vouching, "Wrong status");
         Request storage request = submission.requests[submission.requests.length - 1];
-        Challenge storage challenge = request.challenges[0];
-        Round storage round = challenge.rounds[0];
-        require(round.sideFunded == Party.Requester, "Requester is not funded");
-
+        /* solium-disable indentation */
+        {
+            Challenge storage challenge = request.challenges[0];
+            Round storage round = challenge.rounds[0];
+            require(round.sideFunded == Party.Requester, "Requester is not funded");
+        }
+        /* solium-enable indentation */
         uint timeOffset = now - submissionDuration; // Precompute the offset before the loop for efficiency and then compare it with the submission time to check the expiration.
+
+        bytes2 PREFIX = "\x19\x01";
+        for (uint i = 0; i < _signatures.length && request.vouches.length < requiredNumberOfVouches; i++) {
+            address voucherAddress;
+            /* solium-disable indentation */
+            {
+                // Get typed structure hash.
+                bytes32 messageHash = keccak256(abi.encode(IS_HUMAN_VOUCHER_TYPEHASH, _submissionID, _expirationTimestamps[i]));
+                bytes32 hash = keccak256(abi.encodePacked(PREFIX, DOMAIN_SEPARATOR, messageHash));
+
+                // Decode the signature.
+                bytes memory signature = _signatures[i];
+                bytes32 r;
+                bytes32 s;
+                uint8 v;
+                assembly {
+                    r := mload(add(signature, 0x20))
+                    s := mload(add(signature, 0x40))
+                    v := byte(0, mload(add(signature, 0x60)))
+                }
+                if (v < 27) v += 27;
+                require(v == 27 || v == 28, "Invalid signature");
+
+                // Recover the signer's address.
+                voucherAddress = ecrecover(hash, v, r, s);
+            }
+            /* solium-enable indentation */
+
+            Submission storage voucher = submissions[voucherAddress];
+            if (!voucher.hasVouched && voucher.registered && timeOffset <= voucher.submissionTime &&
+            now < _expirationTimestamps[i] && _submissionID != voucherAddress) {
+                request.vouches.push(voucherAddress);
+                voucher.hasVouched = true;
+                emit VouchAdded(_submissionID, voucherAddress);
+            }
+        }
+
         for (uint i = 0; i<_vouches.length && request.vouches.length<requiredNumberOfVouches; i++) {
             // Check that the vouch isn't currently used by another submission and the voucher has a right to vouch.
             Submission storage voucher = submissions[_vouches[i]];

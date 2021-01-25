@@ -8,7 +8,8 @@ module.exports = {
         optimizer: {
           enabled: true,
           runs: 200
-        }
+        },
+        evmVersion: 'istanbul'
       },
       version: '0.5.13' // Fetch exact version from solc-bin (default: truffle's version)
     }
