@@ -1,6 +1,6 @@
 /**
- *  @authors: [@unknownunknown1*, @nix1g]
- *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*, @ferittuncer]
+ *  @authors: [@unknownunknown1, @nix1g]
+ *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*, @ferittuncer*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -39,7 +39,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     uint private constant MULTIPLIER_DIVISOR = 10000; // Divisor parameter for multipliers.
 
     bytes32 private constant IS_HUMAN_VOUCHER_TYPEHASH = 0xa9e3fa1df5c3dbef1e9cfb610fa780355a0b5e0acb0fa8249777ec973ca789dc; // The EIP-712 typeHash of IsHumanVoucher. keccak256("IsHumanVoucher(address vouchedSubmission,uint256 voucherExpirationTimestamp)").
-    bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. Used to verify an IsHumanVoucher's signature.
 
     /* Enums */
 
@@ -71,7 +70,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         bool registered; // Whether the submission is in the registry or not. Note that a registered submission won't have privileges (e.g. vouching) if its duration expired.
         bool hasVouched; // True if this submission used its vouch for another submission. This is set back to false once the vouch is processed.
         uint64 submissionTime; // The time when the submission was accepted to the list.
-        uint64 index; // Index of a submission in the array of submissions.
+        uint64 index; // Index of a submission.
         Request[] requests; // List of status change requests made for the submission.
     }
 
@@ -85,11 +84,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         uint16 arbitratorDataID; // The index of the relevant arbitratorData struct. All the arbitrator info is stored in a separate struct to reduce gas cost.
         uint16 lastChallengeID; // The ID of the last challenge.
         uint32 lastProcessedVouch; // Stores the index of the last processed vouch in the array of vouches. It is used for partial processing of the vouches in resolved submissions.
-        uint64 currentDuplicateIndex; // Stores the array index of the duplicate submission provided by the challenger who is currently winning.
+        uint64 currentDuplicateIndex; // Stores the index of the duplicate submission provided by the challenger who is currently winning.
         uint64 challengePeriodStart; // Time when the submission can be challenged.
-        address payable requester; // Address that made a request. It matches submissionID in case of registration requests.
+        address payable requester; // Address that made a request. It is left empty for the registration requests since it matches submissionID in that case.
         address payable ultimateChallenger; // Address of the challenger who won a dispute and who users that vouched for the request must pay the fines to.
-        address[] vouches; // Stores the addresses of all submissions that vouched for this request.
+        address[] vouches; // Stores the addresses of submissions that vouched for this request and whose vouches were used in this request.
         mapping(uint => Challenge) challenges; // Stores all the challenges of this request. challengeID -> Challenge.
         mapping(address => bool) challengeDuplicates; // Indicates whether a certain duplicate address has been used in a challenge or not.
     }
@@ -109,7 +108,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         uint disputeID; // The ID of the dispute related to the challenge.
         Party ruling; // Ruling given by the arbitrator of the dispute.
         uint16 lastRoundID; // The ID of the last round.
-        uint64 duplicateSubmissionIndex; // Index of a submission in the array of submissions, which is a supposed duplicate of a challenged submission. Is only used for reason Duplicate.
+        uint64 duplicateSubmissionIndex; // Index of a submission, which is a supposed duplicate of a challenged submission. It is only used for reason Duplicate.
         address payable challenger; // Address that challenged the request.
         mapping(uint => Round) rounds; // Tracks the info of each funding round of the challenge.
     }
@@ -144,7 +143,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     uint public loserStakeMultiplier; // Multiplier for calculating the fee stake paid by the party that lost the previous round.
 
     uint public submissionCounter; // The total count of all submissions that made a registration request at some point. Includes manually added submissions as well.
-    uint public registrationCounter; // The total count of all submissions that have registered == true. Note that it doesn't take into account the expiration date, thus some of these submissions might not already have their privileges.
+    uint public registrationCounter; // The total count of all submissions that have `registered == true`. Note that it doesn't take into account the expiration date, thus some of these submissions might not already have their privileges.
+
+    bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. It is used to verify the IsHumanVoucher's signature.
 
     ArbitratorData[] public arbitratorDataList; // Stores the arbitrator data of the contract. Updated each time the data is changed.
 
@@ -185,6 +186,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     event ReapplySubmission(address indexed _submissionID, uint _requestID);
 
     /** @dev Emitted when the removal request is made.
+     *  @param _requester The address that made the request.
      *  @param _submissionID The ID of the submission.
      *  @param _requestID The ID of the newly created request.
      */
@@ -261,7 +263,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         arbitratorData.arbitrator = _arbitrator;
         arbitratorData.arbitratorExtraData = _arbitratorExtraData;
 
-        // EIP-712
+        // EIP-712.
         bytes32 DOMAIN_TYPEHASH = 0x8cad95687ba82c2ce50e74f7b754645e5117c3a5bec8151c0726d5857980a866; // keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)").
         uint256 chainId;
         assembly { chainId := chainid } // block.chainid got introduced in Solidity v0.8.0.
@@ -316,7 +318,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Change the base amount required as a deposit to make a request for a submission.
      *  @param _submissionBaseDeposit The new base amount of wei required to make a new request.
      */
-    function changeSubmissionBaseDeposit(uint128 _submissionBaseDeposit) external onlyGovernor {
+    function changeSubmissionBaseDeposit(uint _submissionBaseDeposit) external onlyGovernor {
         submissionBaseDeposit = _submissionBaseDeposit;
     }
 
@@ -342,21 +344,21 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Change the proportion of arbitration fees that must be paid as fee stake by parties when there is no winner or loser (e.g. when the arbitrator refused to rule).
      *  @param _sharedStakeMultiplier Multiplier of arbitration fees that must be paid as fee stake. In basis points.
      */
-    function changeSharedStakeMultiplier(uint64 _sharedStakeMultiplier) external onlyGovernor {
+    function changeSharedStakeMultiplier(uint _sharedStakeMultiplier) external onlyGovernor {
         sharedStakeMultiplier = _sharedStakeMultiplier;
     }
 
     /** @dev Change the proportion of arbitration fees that must be paid as fee stake by the winner of the previous round.
      *  @param _winnerStakeMultiplier Multiplier of arbitration fees that must be paid as fee stake. In basis points.
      */
-    function changeWinnerStakeMultiplier(uint64 _winnerStakeMultiplier) external onlyGovernor {
+    function changeWinnerStakeMultiplier(uint _winnerStakeMultiplier) external onlyGovernor {
         winnerStakeMultiplier = _winnerStakeMultiplier;
     }
 
     /** @dev Change the proportion of arbitration fees that must be paid as fee stake by the party that lost the previous round.
      *  @param _loserStakeMultiplier Multiplier of arbitration fees that must be paid as fee stake. In basis points.
      */
-    function changeLoserStakeMultiplier(uint64 _loserStakeMultiplier) external onlyGovernor {
+    function changeLoserStakeMultiplier(uint _loserStakeMultiplier) external onlyGovernor {
         loserStakeMultiplier = _loserStakeMultiplier;
     }
 
@@ -383,7 +385,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         emit MetaEvidence(2 * newMetaEvidenceUpdates + 1, _clearingMetaEvidence);
     }
 
-    /** @dev Change the arbitrator to be used for disputes that may be raised in the next requests. The arbitrator is trusted to support appeal periods and not reenter.
+    /** @dev Change the arbitrator to be used for disputes that may be raised in the next requests. The arbitrator is trusted to support appeal period and not reenter.
      *  @param _arbitrator The new trusted arbitrator to be used in the next requests.
      *  @param _arbitratorExtraData The extra data used by the new arbitrator.
      */
@@ -422,8 +424,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function reapplySubmission(string calldata _evidence) external payable {
         Submission storage submission = submissions[msg.sender];
         require(submission.registered && submission.status == Status.None, "Wrong status");
-        uint renewalTimestamp = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));
-        require(now >= renewalTimestamp, "Can't reapply yet");
+        uint renewalAvailableAt = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));
+        require(now >= renewalAvailableAt, "Can't reapply yet");
         submission.status = Status.Vouching;
         emit ReapplySubmission(msg.sender, submission.requests.length);
         requestRegistration(msg.sender, _evidence);
@@ -437,8 +439,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     function removeSubmission(address _submissionID, string calldata _evidence) external payable {
         Submission storage submission = submissions[_submissionID];
         require(submission.registered && submission.status == Status.None, "Wrong status");
-        uint renewalTimestamp = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));
-        require(now < renewalTimestamp || now - submission.submissionTime > submissionDuration, "Can't remove during renewal");
+        uint renewalAvailableAt = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));
+        require(now < renewalAvailableAt || now - submission.submissionTime > submissionDuration, "Can't remove during renewal");
         submission.status = Status.PendingRemoval;
         emit RemoveSubmission(msg.sender, _submissionID, submission.requests.length);
         requestRemoval(_submissionID, _evidence);
@@ -494,7 +496,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /** @dev Change submission's state from Vouching to PendingRegistration if all conditions are met.
      *  @param _submissionID The address of the submission which status to change.
-     *  @param _vouches Array of users which vouches to count.
+     *  @param _vouches Array of users whose vouches to count.
      *  @param _signatures Array of EIP-712 signatures of struct IsHumanVoucher (optional).
      *  @param _expirationTimestamps Array of expiration timestamps for each signature (optional).
      *  struct IsHumanVoucher {
@@ -607,7 +609,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         }
         /* solium-enable indentation */
 
-        Round storage round = challenge.rounds[challenge.lastRoundID];
+        Round storage round = challenge.rounds[0];
         ArbitratorData storage arbitratorData = arbitratorDataList[request.arbitratorDataID];
 
         uint arbitrationCost = arbitratorData.arbitrator.arbitrationCost(arbitratorData.arbitratorExtraData);
@@ -732,7 +734,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         withdrawFeesAndRewards(requester, _submissionID, requestID, 0, 0); // Automatically withdraw for the requester.
     }
 
-    /** @dev Deletes vouches of the resolved request, so vouchings of users who vouched for it can be used in other submissions.
+    /** @dev Processes vouches of the resolved request, so vouchings of users who vouched for it can be used in other submissions.
      *  Penalizes users who vouched for bad submissions.
      *  @param _submissionID The address of the submission which vouches to iterate.
      *  @param _requestID The ID of the request which vouches to iterate.
@@ -1007,7 +1009,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                     submission.status = Status.None;
                     request.resolved = true;
                 }
-                // Store the challenger that made the requester lose. Update the challenger if there is a duplicate with lower submission time, which is indicated by submission's array index.
+                // Store the challenger that made the requester lose. Update the challenger if there is a duplicate with lower submission time, which is indicated by submission's index.
                 if (_winner==Party.Challenger && (request.ultimateChallenger==address(0x0) || challenge.duplicateSubmissionIndex<request.currentDuplicateIndex)) {
                     request.ultimateChallenger = challenge.challenger;
                     request.currentDuplicateIndex = challenge.duplicateSubmissionIndex;
