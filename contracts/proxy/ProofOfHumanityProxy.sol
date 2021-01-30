@@ -48,12 +48,12 @@ contract ProofOfHumanityProxy is IERC20 {
         return isRegistered(_submissionID) ? 1 : 0;
     }
 
-    /** @dev Returns the count of all submissions that were successfully registered, regardless of whether they're expired or not.
-     *  Note that with the current implementation of ProofOfHumanity it'd be very costly to filter all the expired submissions.
-     *  @return The count of registered submissions.
+    /** @dev Returns the count of all submissions that made a registration request at some point, including those that were added manually.
+     *  Note that with the current implementation of ProofOfHumanity it'd be very costly to count only the submissions that are currently registered.
+     *  @return The total count of submissions.
      */
     function totalSupply() external view returns (uint256) {
-        return PoH.registrationCounter();
+        return PoH.submissionCounter();
     }
 
     function transfer(address _recipient, uint256 _amount) external returns (bool) { return false; }
