@@ -325,7 +325,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Change the duration of the submission, renewal and challenge periods.
      *  @param _submissionDuration The new duration of the time the submission is considered registered.
      *  @param _renewalPeriodDuration The new value that defines the duration of submission's renewal period.
-     *  @param _challengePeriodDuration The new duration of the challenge period.
+     *  @param _challengePeriodDuration The new duration of the challenge period. It should be lower than the time for a dispute.
      */
     function changeDurations(uint64 _submissionDuration, uint64 _renewalPeriodDuration, uint64 _challengePeriodDuration) external onlyGovernor {
         require(_challengePeriodDuration.addCap64(_renewalPeriodDuration) < _submissionDuration, "Incorrect inputs");
