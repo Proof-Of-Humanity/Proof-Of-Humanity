@@ -143,7 +143,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     uint public loserStakeMultiplier; // Multiplier for calculating the fee stake paid by the party that lost the previous round.
 
     uint public submissionCounter; // The total count of all submissions that made a registration request at some point. Includes manually added submissions as well.
-    uint public registrationCounter; // The total count of all submissions that have `registered == true`. Note that it doesn't take into account the expiration date, thus some of these submissions might not already have their privileges.
 
     bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. It is used to verify the IsHumanVoucher's signature.
 
@@ -282,7 +281,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function addSubmissionManually(address[] calldata _submissionIDs, string[] calldata _evidence) external onlyGovernor {
         uint counter = submissionCounter;
-        uint regCounter = registrationCounter;
         uint arbitratorDataID = arbitratorDataList.length - 1;
         for (uint i = 0; i < _submissionIDs.length; i++) {
             Submission storage submission = submissions[_submissionIDs[i]];
@@ -292,7 +290,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
             Request storage request = submission.requests[submission.requests.length++];
             submission.registered = true;
-            regCounter++;
 
             submission.submissionTime = uint64(now);
             request.arbitratorDataID = uint16(arbitratorDataID);
@@ -302,7 +299,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                 emit Evidence(arbitratorDataList[arbitratorDataID].arbitrator, uint(_submissionIDs[i]), msg.sender, _evidence[i]);
         }
         submissionCounter = counter;
-        registrationCounter = regCounter;
     }
 
     /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
@@ -312,7 +308,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.registered && submission.status == Status.None, "Wrong status");
         submission.registered = false;
-        registrationCounter = registrationCounter.subCap(1);
     }
 
     /** @dev Change the base amount required as a deposit to make a request for a submission.
@@ -432,7 +427,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Make a request to remove a submission from the list. Requires full deposit. Accepts enough ETH to cover the deposit, reimburses the rest.
-     *  Note that this request can't be made during the renewal period to avoid spam leading to submission's expiration.
+     *  Note that this request can't be made after the renewal period started to avoid spam leading to submission's expiration.
      *  @param _submissionID The address of the submission to remove.
      *  @param _evidence A link to evidence using its URI.
      */
@@ -440,10 +435,30 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.registered && submission.status == Status.None, "Wrong status");
         uint renewalAvailableAt = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));
-        require(now < renewalAvailableAt || now - submission.submissionTime > submissionDuration, "Can't remove during renewal");
+        require(now < renewalAvailableAt, "Can't remove after renewal");
         submission.status = Status.PendingRemoval;
-        emit RemoveSubmission(msg.sender, _submissionID, submission.requests.length);
-        requestRemoval(_submissionID, _evidence);
+
+        Request storage request = submission.requests[submission.requests.length++];
+        request.requester = msg.sender;
+        request.challengePeriodStart = uint64(now);
+
+        uint arbitratorDataID = arbitratorDataList.length - 1;
+        request.arbitratorDataID = uint16(arbitratorDataID);
+
+        Round storage round = request.challenges[0].rounds[0];
+
+        IArbitrator requestArbitrator = arbitratorDataList[arbitratorDataID].arbitrator;
+        uint arbitrationCost = requestArbitrator.arbitrationCost(arbitratorDataList[arbitratorDataID].arbitratorExtraData);
+        uint totalCost = arbitrationCost.addCap(submissionBaseDeposit);
+        contribute(round, Party.Requester, msg.sender, msg.value, totalCost);
+
+        require(round.paidFees[uint(Party.Requester)] >= totalCost, "You must fully fund your side");
+        round.sideFunded = Party.Requester;
+
+        emit RemoveSubmission(msg.sender, _submissionID, submission.requests.length - 1);
+
+        if (bytes(_evidence).length > 0)
+            emit Evidence(requestArbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
     /** @dev Fund the requester's deposit. Accepts enough ETH to cover the deposit, reimburses the rest.
@@ -715,13 +730,11 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             if (!request.requesterLost) {
                 submission.registered = true;
                 submission.submissionTime = uint64(now);
-                registrationCounter++;
             }
             requester = address(uint160(_submissionID));
         } else if (submission.status == Status.PendingRemoval) {
             submission.registered = false;
             requester = request.requester;
-            registrationCounter = registrationCounter.subCap(1);
         } else
             revert("Incorrect status.");
 
@@ -753,7 +766,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             endIndex = vouchCount;
 
         Reason currentReason = request.currentReason;
-        uint regCounter = registrationCounter;
         // If the ultimate challenger is defined that means that the request was ruled in favor of the challenger.
         bool applyPenalty = request.ultimateChallenger != address(0x0) && (currentReason == Reason.Duplicate || currentReason == Reason.DoesNotExist);
         for (uint i = lastProcessedVouch; i < endIndex; i++) {
@@ -765,11 +777,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                     voucher.requests[voucher.requests.length - 1].requesterLost = true;
 
                 voucher.registered = false;
-                regCounter = regCounter.subCap(1);
             }
         }
         request.lastProcessedVouch = uint32(endIndex);
-        registrationCounter = regCounter;
     }
 
     /** @dev Reimburses contributions if no disputes were raised. If a dispute was raised, sends the fee stake rewards and reimbursements proportionally to the contributions made to the winner of a dispute.
@@ -854,8 +864,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Request storage request = submission.requests[submission.requests.length - 1];
         ArbitratorData storage arbitratorData = arbitratorDataList[request.arbitratorDataID];
 
-        if (bytes(_evidence).length > 0)
-            emit Evidence(arbitratorData.arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
+        emit Evidence(arbitratorData.arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
     /* Internal */
@@ -880,35 +889,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
         if (round.paidFees[uint(Party.Requester)] >= totalCost)
             round.sideFunded = Party.Requester;
-
-        if (bytes(_evidence).length > 0)
-            emit Evidence(requestArbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
-    }
-
-    /** @dev Make a request to remove the submission from the registry.
-     *  Note that removal requests require the full deposit and can't be crowdfunded.
-     *  @param _submissionID The address of the submission.
-     *  @param _evidence A link to evidence using its URI.
-     */
-    function requestRemoval(address _submissionID, string memory _evidence) internal {
-        Submission storage submission = submissions[_submissionID];
-        Request storage request = submission.requests[submission.requests.length++];
-
-        request.requester = msg.sender;
-        request.challengePeriodStart = uint64(now);
-
-        uint arbitratorDataID = arbitratorDataList.length - 1;
-        request.arbitratorDataID = uint16(arbitratorDataID);
-
-        Round storage round = request.challenges[0].rounds[0];
-
-        IArbitrator requestArbitrator = arbitratorDataList[arbitratorDataID].arbitrator;
-        uint arbitrationCost = requestArbitrator.arbitrationCost(arbitratorDataList[arbitratorDataID].arbitratorExtraData);
-        uint totalCost = arbitrationCost.addCap(submissionBaseDeposit);
-        contribute(round, Party.Requester, msg.sender, msg.value, totalCost);
-
-        require(round.paidFees[uint(Party.Requester)] >= totalCost, "You must fully fund your side");
-        round.sideFunded = Party.Requester;
 
         if (bytes(_evidence).length > 0)
             emit Evidence(requestArbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
@@ -970,10 +950,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Challenge storage challenge = request.challenges[_challengeID];
 
         if (status == Status.PendingRemoval) {
-            if (_winner == Party.Requester) {
+            if (_winner == Party.Requester)
                 submission.registered = false;
-                registrationCounter = registrationCounter.subCap(1);
-            }
 
             submission.status = Status.None;
             request.resolved = true;
@@ -989,7 +967,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
                             submission.registered = true;
                             submission.submissionTime = uint64(now);
                             request.resolved = true;
-                            registrationCounter++;
                         } else {
                             // Refresh the state of the request so it can be challenged again.
                             request.disputed = false;

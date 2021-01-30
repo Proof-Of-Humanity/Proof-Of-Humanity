@@ -593,7 +593,7 @@ contract('ProofOfHumanity', function(accounts) {
         from: requester,
         value: requesterTotalCost
       }),
-      "Can't remove during renewal"
+      "Can't remove after renewal"
     )
   })
 
