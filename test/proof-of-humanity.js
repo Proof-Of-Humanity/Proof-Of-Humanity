@@ -111,6 +111,8 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.addSubmissionManually(
       [voucher1, voucher2, voucher3],
       ['', '', ''],
+      [],
+      [],
       { from: governor }
     )
 
@@ -215,7 +217,9 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     await expectRevert(
-      proofH.addSubmissionManually([voucher2], [''], { from: governor }),
+      proofH.addSubmissionManually([voucher2], [''], [], [], {
+        from: governor
+      }),
       'Submission already been created'
     )
   })
@@ -225,7 +229,7 @@ contract('ProofOfHumanity', function(accounts) {
     await proofH.changeMetaEvidence('1', '2', { from: governor })
 
     const oldBalance = await web3.eth.getBalance(requester)
-    const txAddSubmission = await proofH.addSubmission('evidence1', {
+    const txAddSubmission = await proofH.addSubmission('evidence1', '', '', {
       from: requester,
       gasPrice: gasPrice,
       value: 1e18
@@ -351,13 +355,15 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     await expectRevert(
-      proofH.addSubmission('', { from: requester, value: 1e18 }),
+      proofH.addSubmission('', '', '', { from: requester, value: 1e18 }),
       'Wrong status'
     )
 
     // Check that manual actions are not possible as well.
     await expectRevert(
-      proofH.addSubmissionManually([requester], [''], { from: governor }),
+      proofH.addSubmissionManually([requester], [''], [], [], {
+        from: governor
+      }),
       'Submission already been created'
     )
     await expectRevert(
@@ -367,7 +373,10 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should correctly fund the new submission', async () => {
-    await proofH.addSubmission('evidence1', { from: requester, value: 200 })
+    await proofH.addSubmission('evidence1', '', '', {
+      from: requester,
+      value: 200
+    })
 
     let round = await proofH.getRoundInfo(requester, 0, 0, 0)
     assert.equal(
@@ -574,7 +583,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Wrong status'
     )
 
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: other,
       value: requesterTotalCost
     })
@@ -628,7 +637,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should correctly store vouches and change vouching state', async () => {
-    await proofH.addSubmission('evidence1', { from: requester })
+    await proofH.addSubmission('evidence1', '', '', { from: requester })
 
     const txVouchAdd = await proofH.addVouch(requester, { from: voucher1 })
 
@@ -723,7 +732,7 @@ contract('ProofOfHumanity', function(accounts) {
     // Change required number of vouches to 1 to make checks more transparent
     await proofH.changeRequiredNumberOfVouches(1, { from: governor })
 
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -741,7 +750,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Not enough valid vouches'
     )
     // Voucher who already vouched for a different submission.
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester2,
       value: requesterTotalCost
     })
@@ -789,7 +798,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should not use more vouches than needed', async () => {
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -820,7 +829,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should allow signed vouches', async () => {
-    await proofH.addSubmission('evidence1', { from: requester })
+    await proofH.addSubmission('evidence1', '', '', { from: requester })
 
     const timeout = (await time.latest()).add(new BN(15768000)).toNumber() // Expires in 6 months
 
@@ -945,7 +954,7 @@ contract('ProofOfHumanity', function(accounts) {
     // Change required number of vouches to 1 to make checks more transparent
     await proofH.changeRequiredNumberOfVouches(1, { from: governor })
 
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -991,7 +1000,7 @@ contract('ProofOfHumanity', function(accounts) {
     )
 
     // Voucher who already vouched for a different submission.
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester2,
       value: requesterTotalCost
     })
@@ -1055,7 +1064,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should allow a mixture of signed and stored vouches', async () => {
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1111,7 +1120,7 @@ contract('ProofOfHumanity', function(accounts) {
       'Wrong status'
     )
 
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1334,7 +1343,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should not be possible to challenge after timeout', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1358,7 +1367,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should set correct values in parallel disputes', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1555,7 +1564,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should successfully execute a request if it has not been challenged', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1645,7 +1654,7 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Should demand correct appeal fees and register that appeal fee has been paid', async () => {
     let roundInfo
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1828,7 +1837,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should not be possible to fund appeal if the timeout has passed', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1874,7 +1883,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should correctly reset the challenge period if the requester wins', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -1939,7 +1948,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should register the submission if the requester won in all 4 reasons', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2050,7 +2059,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should set correct values if arbitrator refuses to rule', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2113,7 +2122,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should set correct values if challenger wins', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2157,7 +2166,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should switch the winning challenger in reason Duplicate', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2284,7 +2293,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should change the ruling if the loser paid appeal fee while winner did not', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2319,7 +2328,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should process vouches correctly', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2385,7 +2394,7 @@ contract('ProofOfHumanity', function(accounts) {
     // Make it so one of the vouchers is in the middle of reapplication process.
     await time.increase(submissionDuration - renewalPeriodDuration)
 
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2454,7 +2463,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Ultimate challenger should take feeRewards of the first challenge', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2533,7 +2542,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should not withdraw anything from the subsequent challenge', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost * 0.2
     })
@@ -2594,7 +2603,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should withdraw fees correctly if arbitrator refused to rule', async () => {
-    await proofH.addSubmission('', {
+    await proofH.addSubmission('', '', '', {
       from: requester,
       value: requesterTotalCost
     })
@@ -2658,7 +2667,7 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Should make governance changes', async () => {
     await expectRevert(
-      proofH.addSubmissionManually([other], [''], { from: other }),
+      proofH.addSubmissionManually([other], [''], [], [], { from: other }),
       'The caller must be the governor'
     )
     await expectRevert(
@@ -2787,7 +2796,7 @@ contract('ProofOfHumanity', function(accounts) {
   })
 
   it('Should correctly withdraw the mistakenly added submission', async () => {
-    await proofH.addSubmission('evidence1', {
+    await proofH.addSubmission('evidence1', '', '', {
       from: requester,
       value: requesterTotalCost * 0.4
     })
