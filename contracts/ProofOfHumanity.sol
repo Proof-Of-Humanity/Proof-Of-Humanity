@@ -454,7 +454,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Make a request to remove a submission from the list. Requires full deposit. Accepts enough ETH to cover the deposit, reimburses the rest.
-     *  Note that this request can't be made after the renewal period started to avoid spam leading to submission's expiration.
+     *  Note that this request can't be made during the renewal period to avoid spam leading to submission's expiration.
      *  @param _submissionID The address of the submission to remove.
      *  @param _evidence A link to evidence using its URI.
      */
@@ -462,7 +462,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         Submission storage submission = submissions[_submissionID];
         require(submission.registered && submission.status == Status.None, "Wrong status");
         uint renewalAvailableAt = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));
-        require(now < renewalAvailableAt, "Can't remove after renewal");
+        require(now < renewalAvailableAt || now - submission.submissionTime > submissionDuration, "Can't remove during renewal");
         submission.status = Status.PendingRemoval;
 
         Request storage request = submission.requests[submission.requests.length++];
