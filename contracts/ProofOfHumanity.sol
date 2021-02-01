@@ -278,8 +278,15 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Allows the governor to directly add new submissions to the list as a part of the seeding event.
      *  @param _submissionIDs The addresses of newly added submissions.
      *  @param _evidence The array of evidence links for each submission.
+     *  @param _names The array of names of the submitters. This parameter is for Subgraph only and it won't be used in this contract.
+     *  @param _bios The array of bios of the submitters. This parameter is for Subgraph only and it won't be used in this contract.
      */
-    function addSubmissionManually(address[] calldata _submissionIDs, string[] calldata _evidence) external onlyGovernor {
+    function addSubmissionManually(
+        address[] calldata _submissionIDs,
+        string[] calldata _evidence,
+        string[] calldata _names,
+        string[] calldata _bios
+    ) external onlyGovernor {
         uint counter = submissionCounter;
         uint arbitratorDataID = arbitratorDataList.length - 1;
         for (uint i = 0; i < _submissionIDs.length; i++) {
@@ -399,8 +406,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
 
     /** @dev Make a request to add a new entry to the list. Paying the full deposit right away is not required as it can be crowdfunded later.
      *  @param _evidence A link to evidence using its URI.
+     *  @param _name The name of the submitter. This parameter is for Subgraph only and it won't be used in this contract.
+     *  @param _bio The bio of the submitter. This parameter is for Subgraph only and it won't be used in this contract.
      */
-    function addSubmission(string calldata _evidence) external payable {
+    function addSubmission(string calldata _evidence, string calldata _name, string calldata _bio) external payable {
         Submission storage submission = submissions[msg.sender];
         require(!submission.registered && submission.status == Status.None, "Wrong status");
         if (submission.requests.length == 0) {
