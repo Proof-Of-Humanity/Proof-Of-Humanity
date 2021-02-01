@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1, @nix1g]
- *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*, @ferittuncer]
+ *  @reviewers: [@fnanni-0*, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*, @ferittuncer*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -221,6 +221,21 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     event ChallengeResolved(address indexed _submissionID, uint indexed _requestID, uint _challengeID);
 
+    /** @dev Emitted in the constructor using most of its parameters.
+     *  This event is needed for Subgraph. ArbitratorExtraData and renewalPeriodDuration are not needed for this event.
+     */
+    event ArbitratorComplete(
+        IArbitrator _arbitrator,
+        address indexed _governor,
+        uint _submissionBaseDeposit,
+        uint _submissionDuration,
+        uint _challengePeriodDuration,
+        uint _requiredNumberOfVouches,
+        uint _sharedStakeMultiplier,
+        uint _winnerStakeMultiplier,
+        uint _loserStakeMultiplier
+    );
+
     /** @dev Constructor.
      *  @param _arbitrator The trusted arbitrator to resolve potential disputes.
      *  @param _arbitratorExtraData Extra data for the trusted arbitrator contract.
@@ -261,6 +276,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         ArbitratorData storage arbitratorData = arbitratorDataList[arbitratorDataList.length++];
         arbitratorData.arbitrator = _arbitrator;
         arbitratorData.arbitratorExtraData = _arbitratorExtraData;
+        emit ArbitratorComplete(_arbitrator, msg.sender, _submissionBaseDeposit, _submissionDuration, _challengePeriodDuration, _requiredNumberOfVouches, _multipliers[0], _multipliers[1], _multipliers[2]);
 
         // EIP-712.
         bytes32 DOMAIN_TYPEHASH = 0x8cad95687ba82c2ce50e74f7b754645e5117c3a5bec8151c0726d5857980a866; // keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)").
@@ -424,8 +440,10 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     /** @dev Make a request to refresh a submissionDuration. Paying the full deposit right away is not required as it can be crowdfunded later.
      *  Note that the user can reapply even when current submissionDuration has not expired, but only after the start of renewal period.
      *  @param _evidence A link to evidence using its URI.
+     *  @param _name The name of the submitter. This parameter is for Subgraph only and it won't be used in this contract.
+     *  @param _bio The bio of the submitter. This parameter is for Subgraph only and it won't be used in this contract.
      */
-    function reapplySubmission(string calldata _evidence) external payable {
+    function reapplySubmission(string calldata _evidence, string calldata _name, string calldata _bio) external payable {
         Submission storage submission = submissions[msg.sender];
         require(submission.registered && submission.status == Status.None, "Wrong status");
         uint renewalAvailableAt = submission.submissionTime.addCap64(submissionDuration.subCap64(renewalPeriodDuration));

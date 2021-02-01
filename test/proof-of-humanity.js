@@ -608,12 +608,12 @@ contract('ProofOfHumanity', function(accounts) {
 
   it('Should not be possible to reapply before renewal time or with the wrong status', async () => {
     await expectRevert(
-      proofH.reapplySubmission('.json', { from: voucher1 }),
+      proofH.reapplySubmission('.json', '', '', { from: voucher1 }),
       "Can't reapply yet"
     )
     await time.increase(submissionDuration - renewalPeriodDuration)
 
-    await proofH.reapplySubmission('.json', { from: voucher1 })
+    await proofH.reapplySubmission('.json', '', '', { from: voucher1 })
 
     const submission = await proofH.getSubmissionInfo(voucher1)
     assert.equal(submission[0].toNumber(), 1, 'Submission has incorrect status')
@@ -625,13 +625,13 @@ contract('ProofOfHumanity', function(accounts) {
     assert.equal(submission[3], true, 'Submission should still be registered')
 
     await expectRevert(
-      proofH.reapplySubmission('.json', { from: other }),
+      proofH.reapplySubmission('.json', '', '', { from: other }),
       'Wrong status'
     )
 
     // Check that it's not possible to reapply 2nd time.
     await expectRevert(
-      proofH.reapplySubmission('.json', { from: voucher1 }),
+      proofH.reapplySubmission('.json', '', '', { from: voucher1 }),
       'Wrong status'
     )
   })
@@ -2415,7 +2415,7 @@ contract('ProofOfHumanity', function(accounts) {
 
     // Change required number of vouches to 1 because the rest 2 are used.
     await proofH.changeRequiredNumberOfVouches(1, { from: governor })
-    await proofH.reapplySubmission('', {
+    await proofH.reapplySubmission('', '', '', {
       from: voucher1,
       value: requesterTotalCost
     })
