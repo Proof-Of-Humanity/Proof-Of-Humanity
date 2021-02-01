@@ -602,7 +602,7 @@ contract('ProofOfHumanity', function(accounts) {
         from: requester,
         value: requesterTotalCost
       }),
-      "Can't remove after renewal"
+      "Can't remove during renewal"
     )
   })
 
