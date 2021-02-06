@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1, @nix1g]
- *  @reviewers: [@fnanni-0, @mtsalenc*, @nix1g*, @clesaege*, @hbarcelos*, @ferittuncer*]
+ *  @reviewers: [@fnanni-0, @mtsalenc*, @nix1g, @clesaege*, @hbarcelos*, @ferittuncer*]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
@@ -31,13 +31,14 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     using CappedMath for uint;
     using CappedMath for uint64;
 
-    /* Constants */
+    /* Constants and immutable */
 
     uint private constant RULING_OPTIONS = 2; // The amount of non 0 choices the arbitrator can give.
     uint private constant AUTO_PROCESSED_VOUCH = 10; // The number of vouches that will be automatically processed when executing a request.
     uint private constant FULL_REASONS_SET = 15; // Indicates that reasons' bitmap is full. 0b1111.
     uint private constant MULTIPLIER_DIVISOR = 10000; // Divisor parameter for multipliers.
 
+    bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. It is used to verify the IsHumanVoucher's signature.
     bytes32 private constant IS_HUMAN_VOUCHER_TYPEHASH = 0xa9e3fa1df5c3dbef1e9cfb610fa780355a0b5e0acb0fa8249777ec973ca789dc; // The EIP-712 typeHash of IsHumanVoucher. keccak256("IsHumanVoucher(address vouchedSubmission,uint256 voucherExpirationTimestamp)").
 
     /* Enums */
@@ -82,7 +83,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         uint8 usedReasons; // Bitmap of the reasons used by challengers of this request.
         uint16 nbParallelDisputes; // Tracks the number of simultaneously raised disputes. Parallel disputes are only allowed for reason Duplicate.
         uint16 arbitratorDataID; // The index of the relevant arbitratorData struct. All the arbitrator info is stored in a separate struct to reduce gas cost.
-        uint16 lastChallengeID; // The ID of the last challenge.
+        uint16 lastChallengeID; // The ID of the last challenge, which is equal to the total number of challenges for the request.
         uint32 lastProcessedVouch; // Stores the index of the last processed vouch in the array of vouches. It is used for partial processing of the vouches in resolved submissions.
         uint64 currentDuplicateIndex; // Stores the index of the duplicate submission provided by the challenger who is currently winning.
         uint64 challengePeriodStart; // Time when the submission can be challenged.
@@ -143,8 +144,6 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     uint public loserStakeMultiplier; // Multiplier for calculating the fee stake paid by the party that lost the previous round.
 
     uint public submissionCounter; // The total count of all submissions that made a registration request at some point. Includes manually added submissions as well.
-
-    bytes32 private DOMAIN_SEPARATOR; // The EIP-712 domainSeparator specific to this deployed instance. It is used to verify the IsHumanVoucher's signature.
 
     ArbitratorData[] public arbitratorDataList; // Stores the arbitrator data of the contract. Updated each time the data is changed.
 
