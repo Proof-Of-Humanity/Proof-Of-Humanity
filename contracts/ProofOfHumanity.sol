@@ -197,7 +197,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     event SubmissionChallenged(address indexed _submissionID, uint indexed _requestID, uint _challengeID);
 
-    /** @dev To be emitted when someone contributes to the appeal process.
+    /** @dev Emitted when someone contributes to the appeal process.
      *  @param _submissionID The ID of the submission.
      *  @param _challengeID The index of the challenge.
      *  @param _party The party which received the contribution.
@@ -290,7 +290,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     // *      Governance      * //
     // ************************ //
 
-    /** @dev Allows the governor to directly add new submissions to the list as a part of the seeding event.
+    /** @dev Allow the governor to directly add new submissions to the list as a part of the seeding event.
      *  @param _submissionIDs The addresses of newly added submissions.
      *  @param _evidence The array of evidence links for each submission.
      *  @param _names The array of names of the submitters. This parameter is for Subgraph only and it won't be used in this function.
@@ -317,7 +317,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         submissionCounter = counter;
     }
 
-    /** @dev Allows the governor to directly remove a registered entry from the list as a part of the seeding event.
+    /** @dev Allow the governor to directly remove a registered entry from the list as a part of the seeding event.
      *  @param _submissionID The address of a submission to remove.
      */
     function removeSubmissionManually(address _submissionID) external onlyGovernor {
@@ -514,7 +514,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         emit VouchRemoved(_submissionID, msg.sender);
     }
 
-    /** @dev Allows to withdraw a mistakenly added submission while it's still in a vouching state.
+    /** @dev Allow to withdraw a mistakenly added submission while it's still in a vouching state.
      */
     function withdrawSubmission() external {
         Submission storage submission = submissions[msg.sender];
@@ -600,7 +600,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.challengePeriodStart = uint64(now);
     }
 
-    /** @dev Challenge the submission's request. Accepts enough ETH to cover the deposit, reimburses the rest.
+    /** @dev Challenge the submission's request. Accept enough ETH to cover the deposit, reimburse the rest.
      *  @param _submissionID The address of the submission which request to challenge.
      *  @param _reason The reason to challenge the request. Left empty for removal requests.
      *  @param _duplicateID The address of a supposed duplicate submission. Ignored if the reason is not Duplicate.
@@ -677,7 +677,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             emit Evidence(arbitratorData.arbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
-    /** @dev Takes up to the total amount required to fund a side of an appeal. Reimburses the rest. Creates an appeal if both sides are fully funded.
+    /** @dev Take up to the total amount required to fund a side of an appeal. Reimburse the rest. Create an appeal if both sides are fully funded.
      *  @param _submissionID The address of the submission which request to fund.
      *  @param _challengeID The index of a dispute, created for the request.
      *  @param _side The recipient of the contribution.
@@ -765,8 +765,8 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         withdrawFeesAndRewards(requester, _submissionID, requestID, 0, 0); // Automatically withdraw for the requester.
     }
 
-    /** @dev Processes vouches of the resolved request, so vouchings of users who vouched for it can be used in other submissions.
-     *  Penalizes users who vouched for bad submissions.
+    /** @dev Process vouches of the resolved request, so vouchings of users who vouched for it can be used in other submissions.
+     *  Penalize users who vouched for bad submissions.
      *  @param _submissionID The address of the submission which vouches to iterate.
      *  @param _requestID The ID of the request which vouches to iterate.
      *  @param _iterations The number of iterations to go through.
@@ -800,7 +800,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         request.lastProcessedVouch = uint32(endIndex);
     }
 
-    /** @dev Reimburses contributions if no disputes were raised. If a dispute was raised, sends the fee stake rewards and reimbursements proportionally to the contributions made to the winner of a dispute.
+    /** @dev Reimburse contributions if no disputes were raised. If a dispute was raised, send the fee stake rewards and reimbursements proportionally to the contributions made to the winner of a dispute.
      *  @param _beneficiary The address that made contributions to a request.
      *  @param _submissionID The address of the submission with the request from which to withdraw.
      *  @param _requestID The request from which to withdraw.
@@ -844,7 +844,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     }
 
     /** @dev Give a ruling for a dispute. Can only be called by the arbitrator. TRUSTED.
-     *  Accounts for the situation where the winner loses a case due to paying less appeal fees than expected.
+     *  Account for the situation where the winner loses a case due to paying less appeal fees than expected.
      *  @param _disputeID ID of the dispute in the arbitrator contract.
      *  @param _ruling Ruling given by the arbitrator. Note that 0 is reserved for "Refused to arbitrate".
      */
@@ -912,7 +912,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             emit Evidence(requestArbitrator, submission.requests.length - 1 + uint(_submissionID), msg.sender, _evidence);
     }
 
-    /** @dev Returns the contribution value and remainder from available ETH and required amount.
+    /** @dev Return the contribution value and remainder from available ETH and required amount.
      *  @param _available The amount of ETH available for the contribution.
      *  @param _requiredAmount The amount of ETH required for the contribution.
      *  @return taken The amount of ETH taken.
@@ -1021,7 +1021,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
     // *       Getters        * //
     // ************************ //
 
-    /** @dev Returns true if the submission is registered and not expired.
+    /** @dev Return true if the submission is registered and not expired.
      *  @param _submissionID The address of the submission.
      *  @return Whether the submission is registered or not.
      */
@@ -1030,14 +1030,14 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         return submission.registered && now - submission.submissionTime <= submissionDuration;
     }
 
-    /** @dev Gets the number of times the arbitrator data was updated.
+    /** @dev Get the number of times the arbitrator data was updated.
      *  @return The number of arbitrator data updates.
      */
     function getArbitratorDataListCount() external view returns (uint) {
         return arbitratorDataList.length;
     }
 
-    /** @dev Checks whether the duplicate address has been used in challenging the request or not.
+    /** @dev Check whether the duplicate address has been used in challenging the request or not.
      *  @param _submissionID The address of the submission to check.
      *  @param _requestID The request to check.
      *  @param _duplicateID The duplicate to check.
@@ -1048,7 +1048,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         return request.challengeDuplicates[_duplicateID];
     }
 
-    /** @dev Gets the contributions made by a party for a given round of a given challenge of a request.
+    /** @dev Get the contributions made by a party for a given round of a given challenge of a request.
      *  @param _submissionID The address of the submission.
      *  @param _requestID The request to query.
      *  @param _challengeID the challenge to query.
@@ -1069,7 +1069,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         contributions = round.contributions[_contributor];
     }
 
-    /** @dev Returns the information of the submission. Includes length of requests array.
+    /** @dev Return the information of the submission. Includes length of requests array.
      *  @param _submissionID The address of the queried submission.
      *  @return The information of the submission.
      */
@@ -1096,7 +1096,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         );
     }
 
-    /** @dev Gets the information of a particular challenge of the request.
+    /** @dev Get the information of a particular challenge of the request.
      *  @param _submissionID The address of the queried submission.
      *  @param _requestID The request to query.
      *  @param _challengeID The challenge to query.
@@ -1124,7 +1124,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         );
     }
 
-    /** @dev Gets information of a request of a submission.
+    /** @dev Get information of a request of a submission.
      *  @param _submissionID The address of the queried submission.
      *  @param _requestID The request to be queried.
      *  @return The request information.
@@ -1160,7 +1160,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         );
     }
 
-    /** @dev Gets the number of vouches of a particular request.
+    /** @dev Get the number of vouches of a particular request.
      *  @param _submissionID The address of the queried submission.
      *  @param _requestID The request to query.
      *  @return The current number of vouches.
@@ -1170,7 +1170,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         return request.vouches.length;
     }
 
-    /** @dev Gets the information of a round of a request.
+    /** @dev Get the information of a round of a request.
      *  @param _submissionID The address of the queried submission.
      *  @param _requestID The request to query.
      *  @param _challengeID The challenge to query.
