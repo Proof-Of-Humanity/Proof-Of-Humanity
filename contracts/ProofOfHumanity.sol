@@ -7,11 +7,12 @@
  *  @tools: [MythX*]
  */
 
-pragma solidity ^0.5.13;
+pragma solidity ^0.5.17;
 pragma experimental ABIEncoderV2;
 
 /* solium-disable max-len*/
 /* solium-disable error-reason */
+/* solium-disable security/no-send */
 import "@kleros/erc-792/contracts/IArbitrable.sol";
 import "@kleros/erc-792/contracts/erc-1497/IEvidence.sol";
 import "@kleros/erc-792/contracts/IArbitrator.sol";
@@ -88,7 +89,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
         uint64 currentDuplicateIndex; // Stores the index of the duplicate submission provided by the challenger who is currently winning.
         uint64 challengePeriodStart; // Time when the submission can be challenged.
         address payable requester; // Address that made a request. It is left empty for the registration requests since it matches submissionID in that case.
-        address payable ultimateChallenger; // Address of the challenger who won a dispute and who users that vouched for the request must pay the fines to.
+        address payable ultimateChallenger; // Address of the challenger who won a dispute. Users who vouched for the challenged submission must pay the fines to this address.
         address[] vouches; // Stores the addresses of submissions that vouched for this request and whose vouches were used in this request.
         mapping(uint => Challenge) challenges; // Stores all the challenges of this request. challengeID -> Challenge.
         mapping(address => bool) challengeDuplicates; // Indicates whether a certain duplicate address has been used in a challenge or not.
