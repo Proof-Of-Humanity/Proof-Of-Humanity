@@ -11,7 +11,7 @@ module.exports = {
         },
         evmVersion: 'istanbul'
       },
-      version: '0.5.13' // Fetch exact version from solc-bin (default: truffle's version)
+      version: '0.5.17' // Fetch exact version from solc-bin (default: truffle's version)
     }
   },
   networks: {
