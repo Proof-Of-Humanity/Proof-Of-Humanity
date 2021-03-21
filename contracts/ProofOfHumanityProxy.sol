@@ -51,6 +51,15 @@ contract ProofOfHumanityProxy {
         require(msg.sender == governor, "The caller must be the governor.");
         PoH = _PoH;
     }
+    
+    /** @dev Changes the address of the the governor.
+     *  @param _governor The address of the new governor.
+     */
+    function changeGovernor(address _governor) external {
+        require(msg.sender == governor, "The caller must be the governor.");
+        governor = _governor;
+    }
+    
 
     /** @dev Returns true if the submission is registered and not expired.
      *  @param _submissionID The address of the submission.
