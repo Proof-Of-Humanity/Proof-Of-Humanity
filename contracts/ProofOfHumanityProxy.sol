@@ -1,5 +1,5 @@
 /**
- *  @authors: [@unknownunknown1, @clesaege]
+ *  @authors: [@unknownunknown1*, @clesaege]
  *  @reviewers: []
  *  @auditors: []
  *  @bounties: []
@@ -35,6 +35,7 @@ contract ProofOfHumanityProxy {
     address public governor = msg.sender;
     string public name = "Human Vote";
     string public symbol = "VOTE";
+    uint8 public decimals = 0;
 
     /** @dev Constructor.
      *  @param _PoH The address of the related ProofOfHumanity contract.
