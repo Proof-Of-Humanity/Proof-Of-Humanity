@@ -1,6 +1,6 @@
 /**
  *  @authors: [@unknownunknown1, @nix1g]
- *  @reviewers: [@fnanni-0, @mtsalenc*, @nix1g, @clesaege*, @hbarcelos*, @ferittuncer*]
+ *  @reviewers: [@fnanni-0, @mtsalenc*, @nix1g, @clesaege*, @hbarcelos*, @ferittuncer*, @shalzz]
  *  @auditors: []
  *  @bounties: []
  *  @deployments: []
