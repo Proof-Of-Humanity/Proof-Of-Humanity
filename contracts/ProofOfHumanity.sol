@@ -1028,7 +1028,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
      */
     function isRegistered(address _submissionID) external view returns (bool) {
         Submission storage submission = submissions[_submissionID];
-        return submission.registered && now - submission.submissionTime <= submissionDuration;
+        return _safeIsRegistered(submission);
     }
 
     /** @dev Get the number of times the arbitrator data was updated.
@@ -1091,7 +1091,7 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             submission.status,
             submission.submissionTime,
             submission.index,
-            submission.registered,
+            _safeIsRegistered(submission),
             submission.hasVouched,
             submission.requests.length
         );
@@ -1198,5 +1198,9 @@ contract ProofOfHumanity is IArbitrable, IEvidence {
             round.sideFunded,
             round.feeRewards
         );
+    }
+
+    function _safeIsRegistered(Submission submissionInfo) internal view returns (bool) {
+        return submission.registered && now - submission.submissionTime <= submissionDuration;
     }
 }
