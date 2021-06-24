@@ -1,7 +1,9 @@
 # Proof-Of-Humanity
+
 Proof-of-Humanity smart contract
 
-You can use the *isRegistered(address _party)* function to determine if an address is or isn't registered.
+You must use the `isRegistered(address _party)` function to determine if an address is or isn't registered.
+Do not use `getSubmissionInfo(address _submissionId).registered` since this only returns the state of the submissionInfo variable without considering submission expiration date.
 
 If you are referring to Proof Of Humanity, we advise you to either:
 - Reference the [main contract](https://etherscan.io/address/0xC5E9dDebb09Cd64DfaCab4011A0D5cEDaf7c9BDb) and have a mechanism to switch to a new one.
