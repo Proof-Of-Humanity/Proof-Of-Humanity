@@ -7,7 +7,7 @@
  *  @tools: []
  */
 
-pragma solidity ^0.5.17;
+pragma solidity 0.8.10;
 
 interface IProofOfHumanity {
     
@@ -90,11 +90,19 @@ contract ProofOfHumanityProxy {
         return PoH.submissionCounter();
     }
 
-    function transfer(address _recipient, uint256 _amount) external returns (bool) { return false; }
+    function transfer(address _recipient, uint256 _amount) external pure returns (bool) { 
+        return false; 
+        }
 
-    function allowance(address _owner, address _spender) external view returns (uint256) {}
+    function allowance(address _owner, address _spender) external view returns (uint256) {
 
-    function approve(address _spender, uint256 _amount) external returns (bool) { return false; }
+    }
 
-    function transferFrom(address _sender, address _recipient, uint256 _amount) external returns (bool) { return false; }
+    function approve(address _spender, uint256 _amount) external pure returns (bool) { 
+        return false; 
+        }
+
+    function transferFrom(address _sender, address _recipient, uint256 _amount) external pure returns (bool) { 
+        return false; 
+        }
 } 
